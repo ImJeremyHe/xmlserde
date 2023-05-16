@@ -249,7 +249,7 @@ xml_serde_enum!{
     #[derive(Debug)]
     Gender {
         Male => "male",
-        Female => "female,
+        Female => "female",
     }
 }
 ```
