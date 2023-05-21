@@ -21,9 +21,9 @@ fn get_ser_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
                 if tag == b"" {
                     c.serialize(#name, writer);
                 } else {
-                    let _ = writer.write_event(Event::Start(BytesStart::borrowed_name(tag)));
+                    let _ = writer.write_event(Event::Start(BytesStart::new(String::from_utf8_lossy(tag))));
                     c.serialize(#name, writer);
-                    let _ = writer.write_event(Event::End(BytesEnd::borrowed(tag)));
+                    let _ = writer.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(tag))));
                 }
             },
         }
@@ -116,7 +116,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
                     None => {},
                     Some(__d) => {
                         let r = __d.serialize();
-                        let event = BytesText::from_plain_str(&r);
+                        let event = BytesText::new(&r);
                         writer.write_event(Event::Text(event));
                     }
                 }
@@ -124,7 +124,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
         } else {
             quote! {
                 let r = self.#ident.serialize();
-                let event = BytesText::from_plain_str(&r);
+                let event = BytesText::new(&r);
                 writer.write_event(Event::Text(event));
             }
         }
@@ -134,7 +134,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
             let name = f.name.as_ref().unwrap();
             quote! {
                 if self.#ident {
-                    let event = BytesStart::borrowed_name(#name);
+                    let event = BytesStart::new(String::from_utf8_lossy(#name));
                     writer.write_event(Event::Empty(event));
                 }
             }
@@ -170,7 +170,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
         } else {
             writer.write_event(Event::Start(start));
             #write_text_or_children
-            let end = BytesEnd::borrowed(tag);
+            let end = BytesEnd::new(String::from_utf8_lossy(tag));
             writer.write_event(Event::End(end));
         }
     };
@@ -194,7 +194,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
                 use quick_xml::events::*;
                 use quick_xml::events::attributes::Attribute;
                 use xmlserde::XmlValue;
-                let start = BytesStart::borrowed_name(tag);
+                let start = BytesStart::new(String::from_utf8_lossy(tag));
                 let mut attrs = Vec::<Attribute>::new();
                 #write_ns
                 #write_custom_ns

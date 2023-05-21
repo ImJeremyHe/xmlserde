@@ -77,15 +77,15 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
                 let mut buf = Vec::<u8>::new();
                 let mut result = Option::<Self>::None;
                 loop {
-                    match reader.read_event(&mut buf) {
-                        Ok(Event::End(e)) if e.name() == tag => {
+                    match reader.read_event_into(&mut buf) {
+                        Ok(Event::End(e)) if e.name().into_inner() == tag => {
                             break
                         },
-                        Ok(Event::Start(_s)) => match _s.name() {
+                        Ok(Event::Start(_s)) => match _s.name().into_inner() {
                             #(#event_start_branches)*
                             _ => {},
                         },
-                        Ok(Event::Empty(_s)) => match _s.name() {
+                        Ok(Event::Empty(_s)) => match _s.name().into_inner() {
                             #(#event_empty_branches)*
                             _ => {},
                         }
@@ -161,7 +161,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                 #fields_init
                 attrs.into_iter().for_each(|attr| {
                     if let Ok(attr) = attr {
-                        match attr.key {
+                        match attr.key.into_inner() {
                             #(#attr_branches)*
                             _ => {},
                         }
@@ -172,8 +172,8 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                 #vec_init
                 if is_empty {} else {
                     loop {
-                        match reader.read_event(&mut buf) {
-                            Ok(Event::End(e)) if e.name() == tag => {
+                        match reader.read_event_into(&mut buf) {
+                            Ok(Event::End(e)) if e.name().into_inner() == tag => {
                                 break
                             },
                             #sfc_branch
@@ -349,7 +349,7 @@ fn sfc_match_branch(fields: Vec<StructField>) -> proc_macro2::TokenStream {
         idents.push(ident);
     });
     quote! {
-        #(Ok(Event::Empty(__s)) if __s.name() == #tags => {
+        #(Ok(Event::Empty(__s)) if __s.name().into_inner() == #tags => {
             #idents = true;
         })*
     }
@@ -424,7 +424,7 @@ fn text_match_branch(field: StructField) -> proc_macro2::TokenStream {
     quote! {
         Ok(Event::Text(__s)) => {
             use xmlserde::{XmlValue, XmlDeserialize};
-            let __r = __s.unescape_and_decode(reader).unwrap();
+            let __r = __s.unescape().unwrap();
             match #t::deserialize(&__r) {
                 Ok(__v) => {
                     // #ident = v;
@@ -526,7 +526,7 @@ fn children_match_branch(
     quote! {
         Ok(Event::Empty(s)) => {
             let is_empty = true;
-            match s.name() {
+            match s.name().into_inner() {
                 #(#branches)*
                 #untags_branches
                 _ => {},
@@ -534,7 +534,7 @@ fn children_match_branch(
         }
         Ok(Event::Start(s)) => {
             let is_empty = false;
-            match s.name() {
+            match s.name().into_inner() {
                 #(#branches)*
                 #untags_branches
                 _ => {},

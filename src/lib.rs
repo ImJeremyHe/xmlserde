@@ -87,7 +87,7 @@ pub struct Unparsed {
 impl XmlSerialize for Unparsed {
     fn serialize<W: Write>(&self, tag: &[u8], writer: &mut quick_xml::Writer<W>) {
         use quick_xml::events::*;
-        let mut start = BytesStart::borrowed_name(tag);
+        let mut start = BytesStart::new(String::from_utf8_lossy(tag));
         self.attrs.iter().for_each(|(k, v)| {
             let k = k as &str;
             let v = v as &str;
@@ -98,7 +98,7 @@ impl XmlSerialize for Unparsed {
             self.data.iter().for_each(|e| {
                 let _ = writer.write_event(e);
             });
-            let _ = writer.write_event(Event::End(BytesEnd::borrowed(tag)));
+            let _ = writer.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(tag))));
         } else {
             let _ = writer.write_event(Event::Empty(start));
         }
@@ -118,7 +118,8 @@ impl XmlDeserialize for Unparsed {
         let mut buf = Vec::<u8>::new();
         attrs.into_iter().for_each(|a| {
             if let Ok(attr) = a {
-                let key = String::from_utf8(attr.key.to_vec()).unwrap_or(String::from(""));
+                let key =
+                    String::from_utf8(attr.key.into_inner().to_vec()).unwrap_or(String::from(""));
                 let value = String::from_utf8(attr.value.to_vec()).unwrap_or(String::from(""));
                 attrs_vec.push((key, value))
             }
@@ -130,8 +131,8 @@ impl XmlDeserialize for Unparsed {
             };
         }
         loop {
-            match reader.read_event(&mut buf) {
-                Ok(Event::End(e)) if e.name() == tag => break,
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::End(e)) if e.name().into_inner() == tag => break,
                 Ok(Event::Eof) => break,
                 Err(_) => break,
                 Ok(e) => data.push(e.into_owned()),
@@ -150,11 +151,7 @@ where
 {
     use quick_xml::events::BytesDecl;
     let mut writer = quick_xml::Writer::new(Vec::new());
-    let decl = BytesDecl::new(
-        b"1.0".as_ref(),
-        Some(b"UTF-8".as_ref()),
-        Some(b"yes".as_ref()),
-    );
+    let decl = BytesDecl::new("1.0", Some("UTF-8"), Some("yes"));
     let _ = writer.write_event(Event::Decl(decl));
     obj.serialize(
         T::ser_root().expect(r#"Expect a root element to serialize: #[xmlserde(root=b"tag")]"#),
@@ -182,15 +179,15 @@ where
     let mut buf = Vec::<u8>::new();
     let root = T::de_root().expect(r#"#[xmlserde(root = b"tag")]"#);
     loop {
-        match reader.read_event(&mut buf) {
+        match reader.read_event_into(&mut buf) {
             Ok(Event::Start(start)) => {
-                if start.name() == root {
+                if start.name().into_inner() == root {
                     let result = T::deserialize(root, &mut reader, start.attributes(), false);
                     return Ok(result);
                 }
             }
             Ok(Event::Empty(start)) => {
-                if start.name() == root {
+                if start.name().into_inner() == root {
                     let result = T::deserialize(root, &mut reader, start.attributes(), true);
                     return Ok(result);
                 }
