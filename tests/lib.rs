@@ -460,4 +460,20 @@ mod tests {
         let ser = xml_serialize(p);
         assert_eq!(xml, &ser);
     }
+
+    #[test]
+    fn ser_opt_text() {
+        #[derive(Debug, XmlSerialize)]
+        #[xmlserde(root = b"ttt")]
+        pub struct AStruct {
+            #[xmlserde(ty = "text")]
+            pub text: Option<String>,
+        }
+
+        let instance = AStruct {
+            text: Some(String::from("hello world!")),
+        };
+        let expect = xml_serialize(instance);
+        assert_eq!(expect, "<ttt>hello world!</ttt>");
+    }
 }
