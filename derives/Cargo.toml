@@ -1,10 +1,11 @@
 [package]
 name = "xmlserde_derives"
-version = "0.5.1"
+version = "0.5.2"
 description = "macros that help xmlserde serde the xml files"
 authors = ["ImJeremyHe<yiliang.he@qq.com>"]
 license = "MIT"
 edition = "2018"
+repository = "https://github.com/ImJeremyHe/xmlserde"
 
 [lib]
 proc-macro = true

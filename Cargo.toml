@@ -2,10 +2,10 @@
 authors = ["ImJeremyHe<yiliang.he@qq.com>"]
 edition = "2018"
 name = "xmlserde"
-version = "0.5.1"
+version = "0.5.2"
 license = "MIT"
 description = "useful tool for serializing and deserializing xml"
-repository = "https://github.com/proclml/LogiSheets/tree/master/crates/xmlserde"
+repository = "https://github.com/ImJeremyHe/xmlserde"
 keywords = ["xml", "serde"]
 readme = "README.md"
 
@@ -22,4 +22,4 @@ thiserror = "1.0.24"
 ts-rs = "6.1.2"
 
 [dev-dependencies]
-xmlserde_derives = {path = "./derives", version = "0.5.1"}
+xmlserde_derives = {path = "./derives", version = "0.5.2"}
