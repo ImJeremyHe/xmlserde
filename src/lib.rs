@@ -78,7 +78,7 @@ pub trait XmlDeserialize {
 /// Some structs are difficult to parse and Fortunately, those structs
 /// have little affect to us. We just need to read and write them. We use `Unparsed`
 /// to keep them.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Unparsed {
     data: Vec<Event<'static>>,
     attrs: Vec<(String, String)>,
