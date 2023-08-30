@@ -1,3 +1,122 @@
+//! `xmlserde` is another tool for serializing and deserializing XML. It is designed
+//! for easy and clear use.
+//!
+//! Please add these dependencies in your `Cargo.toml`.
+//! ```toml
+//! xmlserde = "0.5"
+//! xmlserde_derives = "0.5"
+//! ```
+//!
+//! # Deserialize
+//! Suppose that XML struct is to be deserialized as below:
+//! ```xml
+//! <person age="8">
+//!     <name>Jeremy</name>
+//!     <pet t="cat">Tom</pet>
+//!     <pet t="dog">Spike</pet>
+//! </person>
+//! ```
+//! You can create a struct and derive the `XmlDeserialize` from `xmlserde_derives`, like:
+//! ```ignore
+//! use xmlserde_derives::XmlDeserialize;
+//! #[derive(XmlDeserialize)]
+//! pub struct Person {
+//!     #[xmlserde(name = b"age", ty = "attr")]
+//!     pub age: u16,
+//!     #[xmlserde(name = b"pet", ty = "child")]
+//!     pub pets: Vec<Pet>,
+//! }
+//!
+//! #[derive(XmlDeserialize)]
+//! pub struct Pet {
+//!     #[xmlserde(name = b"t", ty = "attr")]
+//!     pub t: String,
+//!     #[xmlserde(ty = "text")]
+//!     pub name: String,
+//! }
+//! ```
+//! In `xmlserde`, you need to declare clearly that which tag and which type you are going to `serde`.
+//! Notice that it is a binary string for the `name`.
+//!
+//! # Serialize
+//! As for serializing, you need to derive the `XmlSerialize`.
+//!
+//! # Enum
+//! ## For attribute value
+//! Please check in `xml_serde_enum` section.
+//!
+//! ## For children element
+//! You can define an enum like this.
+//! ```ignore
+//! #[derive(XmlSerialize, Deserialize)]
+//! pub enum Pet{
+//!     #[xmlserde(name = b"dog")]
+//!     Dog(Dog),
+//!     #[xmlserde(name = b"cat")]
+//!     Cat(Cat),
+//! }
+//! pub struct Dog{}
+//! pub struct Cat{}
+//! ```
+//! In a field whose type is an `enum`, we can use `ty = untag`:
+//! ```ignore
+//! #[derive(XmlSerialize, Deserialize)]
+//! pub struct Person {
+//!     #[xmlserde(ty="untag")]
+//!     pub pet: Pet,
+//! }
+//! ```
+//! In this case, `Person` can be serialized as
+//! ```xml
+//! <person>
+//!     <dog>
+//!     ...
+//!     </dog>
+//! </person>
+//! ```
+//! or
+//! ```xml
+//! <person>
+//!     <cat>
+//!     ...
+//!     </cat>
+//! </person>
+//! ```
+//!
+//! # Attributes
+//! - name: the tag of the XML element.
+//! - vec_size: creating a vector with the given capacity before deserilizing a element lists. `vec_size=4` or if your initial capacity is defined in an attr, you can use like this `vec_size="cnt"`.
+//! - default: assigning a parameter-free function to create a default value for a certain field. Notice that it requires the type of this value impls `Eq` and it will skip serializing when the value equals to the default one.
+//! - untag: see the `Enum` above.
+//!
+//! # Examples
+//! Please see [LogiSheets](https://github.com/proclml/LogiSheets/tree/master/crates/workbook) for examples.
+
+/// A macro to help you create mappings between string values in XML and Rust enums.
+///
+/// For example, we can define a mapping like this:
+/// ```
+/// use xmlserde::xml_serde_enum;
+/// xml_serde_enum!{
+///     #[derive(Debug, Clone)]
+///     Gender{
+///         Male => "male",
+///         Female => "female",
+///     }
+/// }
+/// ```
+/// After expansion, you can find an enum is defined like this:
+/// ```
+/// #[derive(Debug, Clone)]
+/// pub enum Gender {
+///     Male,
+///     Female,
+/// }
+/// ```
+/// And string value of `male` will be deserialized as `Gender::Male` while `female` will be as `Gender::Female`.
+/// In the same way, `Gender` will be serialized as `male` of `female`.
+///
+/// Panic if the given string is out of `male` and `female`.
 #[macro_export]
 macro_rules! xml_serde_enum {
     (
@@ -74,10 +193,23 @@ pub trait XmlDeserialize {
     }
 }
 
+/// `Unparsed` keeps the XML struct and will be serialized to XML with nothing change.
+/// It is helpful when you are debugging on deserializeing certain element.
 ///
-/// Some structs are difficult to parse and Fortunately, those structs
-/// have little affect to us. We just need to read and write them. We use `Unparsed`
-/// to keep them.
+/// ```ignore
+/// use xmlserde::Unparsed;
+/// use xmlserde_derive::{XmlSerialize, XmlDeserialize};
+///
+/// #[derive(XmlSerialize, Deserialize)]
+/// pub struct Person {
+///     #[xmlserde(name=b"gender", ty = "attr")]
+///     pub gender: Gender,
+///     #[xmlserde(name=b"hobbies", ty = "child")]
+///     pub hobbies: Unparsed
+/// }
+/// ```
+/// In the example above, `<hobbies>` element keeps unchange after serializing and deserializing.
+/// You can easily make a diff the former and latter version to check if other elments work well.
 #[derive(Debug, Clone)]
 pub struct Unparsed {
     data: Vec<Event<'static>>,
@@ -145,6 +277,9 @@ impl XmlDeserialize for Unparsed {
     }
 }
 
+/// The entry for serializing. `T` should have declared the `root` by `#[xmlserde(root=b"")]`
+/// to tell the serializer the tag name of the root. This function will add the header needed for
+/// a XML file.
 pub fn xml_serialize_with_decl<T>(obj: T) -> String
 where
     T: XmlSerialize,
@@ -160,6 +295,8 @@ where
     String::from_utf8(writer.into_inner()).unwrap()
 }
 
+/// The entry for serializing. `T` should have declared the `root` by `#[xmlserde(root=b"")]`
+/// to tell the serializer the tag name of the root.
 pub fn xml_serialize<T>(obj: T) -> String
 where
     T: XmlSerialize,
@@ -169,6 +306,19 @@ where
     String::from_utf8(writer.into_inner()).unwrap()
 }
 
+/// The entry for deserializing. `T` should have declared the `root` by `#[xmlserde(root=b"")]`
+/// to tell the deserializer which tag is the start for deserializing.
+/// ```ignore
+/// use xmlserde_derives::XmlDeserialize;
+/// #[derive(XmlDeserialize)]
+/// #[xmlserde(root=b"person")]
+/// pub struct Person {
+///     #[xmlserde(name = b"age", ty = "attr")]
+///     pub age: u16,
+///     #[xmlserde(name = b"pet", ty = "child")]
+///     pub pets: Vec<Pet>,
+/// }
+/// ```
 pub fn xml_deserialize_from_reader<T, R>(reader: R) -> Result<T, String>
 where
     T: XmlDeserialize,
@@ -204,7 +354,19 @@ where
     }
 }
 
-/// Keep reading event until meeting the Start Event named `root` and start to deserialize.
+/// The entry for deserializing. `T` should have declared the `root` by `#[xmlserde(root=b"")]`
+/// to tell the deserializer which tag is the start for deserializing.
+/// ```ignore
+/// use xmlserde_derives::XmlDeserialize;
+/// #[derive(XmlDeserialize)]
+/// #[xmlserde(root=b"person")]
+/// pub struct Person {
+///     #[xmlserde(name = b"age", ty = "attr")]
+///     pub age: u16,
+///     #[xmlserde(name = b"pet", ty = "child")]
+///     pub pets: Vec<Pet>,
+/// }
+/// ```
 pub fn xml_deserialize_from_str<T>(xml_str: &str) -> Result<T, String>
 where
     T: XmlDeserialize,

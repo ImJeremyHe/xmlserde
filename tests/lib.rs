@@ -89,6 +89,34 @@ mod tests {
     }
 
     #[test]
+    fn derive_deserialize_vec_with_init_size() {
+        #[derive(XmlDeserialize, Default)]
+        pub struct Child {
+            #[xmlserde(name = b"age", ty = "attr")]
+            pub age: u16,
+            #[xmlserde(ty = "text")]
+            pub name: String,
+        }
+        fn default_zero() -> u32 {
+            0
+        }
+        #[derive(XmlDeserialize, Default)]
+        #[xmlserde(root = b"root")]
+        pub struct Aa {
+            #[xmlserde(name = b"f", ty = "child", vec_size = 10)]
+            pub f: Vec<Child>,
+            #[xmlserde(name = b"cnt", ty = "attr", default = "default_zero")]
+            pub cnt: u32,
+        }
+        let xml = r#"<root cnt="2">
+            <f age="15">Tom</f>
+            <f age="9">Jerry</f>
+        </root>"#;
+        let result = xml_deserialize_from_str::<Aa>(xml).unwrap();
+        assert_eq!(result.f.capacity(), 10);
+    }
+
+    #[test]
     fn serialize_attr_and_text() {
         #[derive(XmlSerialize)]
         #[xmlserde(root = b"Person")]
