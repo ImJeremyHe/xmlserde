@@ -30,13 +30,13 @@ fn get_ser_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
     });
     quote! {
         #[allow(unused_must_use)]
-        impl xmlserde::XmlSerialize for #ident {
+        impl ::xmlserde::XmlSerialize for #ident {
             fn serialize<W: std::io::Write>(
                 &self,
                 tag: &[u8],
-                writer: &mut quick_xml::Writer<W>,
+                writer: &mut ::xmlserde::quick_xml::Writer<W>,
             ) {
-                use quick_xml::events::*;
+                use ::xmlserde::quick_xml::events::*;
                 match self {
                     #(#branches)*
                 }
@@ -73,7 +73,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
     } = FieldsSummary::from_fields(container.struct_fields);
     if text.is_some() && (children.len() > 0 || self_closed_children.len() > 0 || untags.len() > 0)
     {
-        panic!("Cannot owns the text and children at the same time.")
+        panic!("Cannot have the text and children at the same time.")
     }
     let init = init_is_empty(&children, &self_closed_children, &untags, &text);
     let build_attr_and_push = attrs.into_iter().map(|attr| {
@@ -185,15 +185,15 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
     };
     quote! {
         #[allow(unused_must_use)]
-        impl xmlserde::XmlSerialize for #ident {
+        impl ::xmlserde::XmlSerialize for #ident {
             fn serialize<W: std::io::Write>(
                 &self,
                 tag: &[u8],
-                writer: &mut quick_xml::Writer<W>,
+                writer: &mut ::xmlserde::quick_xml::Writer<W>,
             ) {
-                use quick_xml::events::*;
-                use quick_xml::events::attributes::Attribute;
-                use xmlserde::XmlValue;
+                use ::xmlserde::quick_xml::events::*;
+                use ::xmlserde::quick_xml::events::attributes::Attribute;
+                use ::xmlserde::XmlValue;
                 let start = BytesStart::new(String::from_utf8_lossy(tag));
                 let mut attrs = Vec::<Attribute>::new();
                 #write_ns
