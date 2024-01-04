@@ -3,8 +3,8 @@
 //!
 //! Please add these dependencies in your `Cargo.toml`.
 //! ```toml
-//! xmlserde = "0.5"
-//! xmlserde_derives = "0.5"
+//! xmlserde = "0.6"
+//! xmlserde_derives = "0.6"
 //! ```
 //!
 //! # Deserialize
@@ -149,6 +149,10 @@ macro_rules! xml_serde_enum {
 
 use std::io::{BufRead, Write};
 
+// We republic the `quick_xml` here is for helping the `derives` crate import
+// it easily. In this way users don't need to import the `quick-xml` on
+// their own.
+pub use quick_xml;
 use quick_xml::events::Event;
 
 pub trait XmlSerialize {

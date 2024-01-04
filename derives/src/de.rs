@@ -62,14 +62,14 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
     });
     quote! {
         #[allow(unused_assignments)]
-        impl xmlserde::XmlDeserialize for #ident {
+        impl ::xmlserde::XmlDeserialize for #ident {
             fn deserialize<B: std::io::BufRead>(
                 tag: &[u8],
-                reader: &mut quick_xml::Reader<B>,
-                attrs: quick_xml::events::attributes::Attributes,
+                reader: &mut ::xmlserde::quick_xml::Reader<B>,
+                attrs: ::xmlserde::quick_xml::events::attributes::Attributes,
                 is_empty: bool,
             ) -> Self {
-                use quick_xml::events::*;
+                use ::xmlserde::quick_xml::events::*;
                 match tag {
                     #(#exact_tags)*
                     _ => {},
@@ -151,11 +151,11 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     };
     quote! {
         #[allow(unused_assignments)]
-        impl xmlserde::XmlDeserialize for #ident {
+        impl ::xmlserde::XmlDeserialize for #ident {
             fn deserialize<B: std::io::BufRead>(
                 tag: &[u8],
-                reader: &mut quick_xml::Reader<B>,
-                attrs: quick_xml::events::attributes::Attributes,
+                reader: &mut ::xmlserde::quick_xml::Reader<B>,
+                attrs: ::xmlserde::quick_xml::events::attributes::Attributes,
                 is_empty: bool,
             ) -> Self {
                 #fields_init
@@ -168,7 +168,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                     }
                 });
                 let mut buf = Vec::<u8>::new();
-                use quick_xml::events::Event;
+                use ::xmlserde::quick_xml::events::Event;
                 #vec_init
                 if is_empty {} else {
                     loop {

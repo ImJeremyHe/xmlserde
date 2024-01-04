@@ -5,15 +5,15 @@
 `xmlserde` is a tool for serializing or deserializing xml struct.
 It is designed for [LogiSheets](https://github.com/proclml/LogiSheets), which is a spreadsheets application working on the browser.
 
-You can check the detail of usage in the `workbook` directory or [here](https://github.com/proclml/LogiSheets/tree/master/crates/workbook).
+You can check the detail of usage in the `workbook` directory or [here](https://github.com/logisky/LogiSheets/tree/master/crates/workbook).
 
 ## How to use `xmlserde`
 
 `xmlserde` provides macros for you and in the most of cases, they are enough. You should import these crates in yout `Cargo.toml`:
 
 ```toml
-xmlserde = 0.5.0
-xmlserde_derives = 0.5.0
+xmlserde = 0.6.0
+xmlserde_derives = 0.6.0
 ```
 
 ### Deserialize
