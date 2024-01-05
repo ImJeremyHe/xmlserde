@@ -1,8 +1,8 @@
 #[cfg(test)]
 mod tests {
 
-    use xmlserde::xml_serde_enum;
     use xmlserde::{xml_deserialize_from_str, xml_serialize, Unparsed, XmlValue};
+    use xmlserde::{xml_serde_enum, XmlDeserialize, XmlSerialize};
     use xmlserde_derives::{XmlDeserialize, XmlSerialize};
 
     #[test]
@@ -503,5 +503,29 @@ mod tests {
         };
         let expect = xml_serialize(instance);
         assert_eq!(expect, "<ttt>hello world!</ttt>");
+    }
+
+    #[test]
+    fn test_generics() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"Root")]
+        pub struct Root<T: XmlSerialize + XmlDeserialize> {
+            #[xmlserde(ty = "untag")]
+            pub dummy: Option<T>,
+        }
+
+        #[derive(XmlSerialize)]
+        pub enum EnumB<T: XmlSerialize> {
+            #[xmlserde(name = b"a")]
+            #[allow(dead_code)]
+            A1(T),
+        }
+
+        #[derive(Debug, XmlSerialize)]
+        #[xmlserde(root = b"ttt")]
+        pub struct AStruct {
+            #[xmlserde(ty = "text")]
+            pub text: Option<String>,
+        }
     }
 }

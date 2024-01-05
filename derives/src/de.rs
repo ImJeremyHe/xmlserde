@@ -13,6 +13,7 @@ pub fn get_de_impl_block(input: DeriveInput) -> proc_macro2::TokenStream {
 
 pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
     let ident = &container.original.ident;
+    let (impl_generics, type_generics, where_clause) = container.original.generics.split_for_impl();
     let event_start_branches = container.enum_variants.iter().map(|v| {
         let name = &v.name;
         let ty = v.ty;
@@ -62,7 +63,7 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
     });
     quote! {
         #[allow(unused_assignments)]
-        impl ::xmlserde::XmlDeserialize for #ident {
+        impl #impl_generics ::xmlserde::XmlDeserialize for #ident #type_generics #where_clause {
             fn deserialize<B: std::io::BufRead>(
                 tag: &[u8],
                 reader: &mut ::xmlserde::quick_xml::Reader<B>,
@@ -133,6 +134,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     let child_branches = children_match_branch(children, untags);
     let sfc_branch = sfc_match_branch(self_closed_children);
     let ident = &container.original.ident;
+    let (impl_generics, type_generics, where_clause) = container.original.generics.split_for_impl();
     let text_branch = {
         if let Some(t) = text {
             Some(text_match_branch(t))
@@ -151,7 +153,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     };
     quote! {
         #[allow(unused_assignments)]
-        impl ::xmlserde::XmlDeserialize for #ident {
+        impl #impl_generics ::xmlserde::XmlDeserialize for #ident #type_generics #where_clause {
             fn deserialize<B: std::io::BufRead>(
                 tag: &[u8],
                 reader: &mut ::xmlserde::quick_xml::Reader<B>,
@@ -310,8 +312,8 @@ fn get_vec_init(children: &[StructField]) -> proc_macro2::TokenStream {
                 let vec_ty = &c.generic.get_vec().unwrap();
                 let ident = c.original.ident.as_ref().unwrap();
                 match lit {
-                    syn::Lit::Str(_) => {
-                        let path = container::parse_lit_into_expr_path(lit).unwrap();
+                    syn::Lit::Str(s) => {
+                        let path = container::parse_lit_str::<syn::Expr>(s).unwrap();
                         quote! {
                             #ident = Vec::<#vec_ty>::with_capacity(#path as usize);
                         }

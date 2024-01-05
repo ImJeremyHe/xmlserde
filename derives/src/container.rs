@@ -3,11 +3,10 @@ use crate::symbol::{
 };
 use proc_macro2::{Group, Span, TokenStream, TokenTree};
 use syn::parse::{self, Parse};
-use syn::Meta::List;
-use syn::Meta::NameValue;
+use syn::punctuated::Punctuated;
+use syn::token::Comma;
 use syn::Meta::Path;
-use syn::NestedMeta::Lit;
-use syn::NestedMeta::Meta;
+use syn::Meta::{self, NameValue};
 use syn::Variant;
 
 pub struct Container<'a> {
@@ -35,34 +34,28 @@ impl<'a> Container<'a> {
             .flatten()
         {
             match meta_item {
-                Meta(NameValue(m)) if m.path == WITH_NS => {
-                    if let Ok(s) = get_lit_byte_str(&m.lit) {
+                NameValue(m) if m.path == WITH_NS => {
+                    if let Ok(s) = get_lit_byte_str(&m.value) {
                         with_ns = Some(s.clone());
                     }
                 }
-                Meta(NameValue(r)) if r.path == ROOT => {
-                    if let Ok(s) = get_lit_byte_str(&r.lit) {
-                        root = Some(s.clone());
-                    }
+                NameValue(m) if m.path == ROOT => {
+                    let s = get_lit_byte_str(&m.value).expect("parse root failed");
+                    root = Some(s.clone());
                 }
-                Meta(List(l)) if l.path == WITH_CUSTOM_NS => {
-                    let mut iter = l.nested.into_iter();
-                    let first = iter
-                        .next()
-                        .expect("with_custom_ns should at least 2 arguments");
-                    let second = iter
-                        .next()
-                        .expect("with_custom_ns should at least 2 arguments");
-                    match (first, second) {
-                        (Lit(f), Lit(s)) => {
-                            let f = get_lit_byte_str(&f).unwrap().clone();
-                            let s = get_lit_byte_str(&s).unwrap().clone();
-                            custom_ns.push((f, s));
-                        }
-                        _ => panic!(r#"with_custom_ns(b"r", b"ns")"#),
+                Meta::List(l) if l.path == WITH_CUSTOM_NS => {
+                    let strs = l
+                        .parse_args_with(Punctuated::<syn::LitByteStr, Comma>::parse_terminated)
+                        .unwrap();
+                    let mut iter = strs.iter();
+                    let first = iter.next().expect("with_custom_ns should have 2 arguments");
+                    let second = iter.next().expect("with_custom_ns should have 2 arguments");
+                    if iter.next().is_some() {
+                        panic!("with_custom_ns should have 2 arguments")
                     }
+                    custom_ns.push((first.clone(), second.clone()));
                 }
-                _ => panic!("unexpected attr in struct"),
+                _ => panic!("unexpected"),
             }
         }
         match &item.data {
@@ -156,13 +149,13 @@ impl<'a> StructField<'a> {
             .flatten()
         {
             match meta_item {
-                Meta(NameValue(m)) if m.path == NAME => {
-                    if let Ok(s) = get_lit_byte_str(&m.lit) {
+                NameValue(m) if m.path == NAME => {
+                    if let Ok(s) = get_lit_byte_str(&m.value) {
                         name = Some(s.clone());
                     }
                 }
-                Meta(NameValue(m)) if m.path == TYPE => {
-                    if let Ok(s) = get_lit_str(&m.lit) {
+                NameValue(m) if m.path == TYPE => {
+                    if let Ok(s) = get_lit_str(&m.value) {
                         let t = match s.value().as_str() {
                             "attr" => EleType::Attr,
                             "child" => EleType::Child,
@@ -174,25 +167,28 @@ impl<'a> StructField<'a> {
                         ty = Some(t);
                     }
                 }
-                Meta(NameValue(m)) if m.path == VEC_SIZE => match m.lit {
-                    syn::Lit::Str(_) | syn::Lit::Int(_) => {
-                        vec_size = Some(m.lit);
+                NameValue(m) if m.path == VEC_SIZE => {
+                    if let syn::Expr::Lit(lit) = m.value {
+                        match lit.lit {
+                            syn::Lit::Str(_) | syn::Lit::Int(_) => {
+                                vec_size = Some(lit.lit);
+                            }
+                            _ => panic!(),
+                        }
+                    } else {
+                        panic!()
                     }
-                    _ => panic!(),
-                },
-                Meta(Path(word)) if word == SKIP_SERIALIZING => {
+                }
+                Path(word) if word == SKIP_SERIALIZING => {
                     skip_serializing = true;
                 }
-                Meta(NameValue(m)) if m.path == DEFAULT => {
-                    if let Ok(path) = parse_lit_into_expr_path(&m.lit) {
-                        default = Some(path);
-                    }
+                NameValue(m) if m.path == DEFAULT => {
+                    let path = parse_lit_into_expr_path(&m.value)
+                        .expect("parse default path")
+                        .clone();
+                    default = Some(path);
                 }
-                Meta(_) => {
-                    let s = format!("UNKNOWNED xmlserde variant attribute");
-                    panic!("{}", s);
-                }
-                Lit(_) => unimplemented!(),
+                _ => panic!("unexpected"),
             }
         }
         if ty.is_none() {
@@ -240,12 +236,12 @@ impl<'a> EnumVariant<'a> {
             .flatten()
         {
             match meta_item {
-                Meta(NameValue(m)) if m.path == NAME => {
-                    if let Ok(s) = get_lit_byte_str(&m.lit) {
+                NameValue(m) if m.path == NAME => {
+                    if let Ok(s) = get_lit_byte_str(&m.value) {
                         name = Some(s.clone());
                     }
                 }
-                _ => panic!("Invalid attr"),
+                _ => panic!("unexpected"),
             }
         }
         let ty = &v.fields.iter().next().unwrap().ty;
@@ -285,47 +281,38 @@ pub enum Derive {
     Deserialize,
 }
 
-fn get_xmlserde_meta_items(attr: &syn::Attribute) -> Result<Vec<syn::NestedMeta>, ()> {
-    if attr.path != XML_SERDE {
+fn get_xmlserde_meta_items(attr: &syn::Attribute) -> Result<Vec<syn::Meta>, ()> {
+    if attr.path() != XML_SERDE {
         return Ok(Vec::new());
     }
 
-    match attr.parse_meta() {
-        Ok(List(meta)) => Ok(meta.nested.into_iter().collect()),
-        Ok(_) => {
-            Err(())
-            // panic!("expected #[xmlserde(...)]")
-        }
+    match attr.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated) {
+        Ok(meta) => Ok(meta.into_iter().collect()),
         Err(_) => Err(()),
     }
 }
 
-fn get_lit_byte_str<'a>(lit: &'a syn::Lit) -> Result<&'a syn::LitByteStr, ()> {
-    if let syn::Lit::ByteStr(bl) = lit {
-        Ok(bl)
-    } else {
-        Err(())
-    }
-}
-
-fn get_lit_str<'a>(lit: &'a syn::Lit) -> Result<&'a syn::LitStr, ()> {
-    if let syn::Lit::Str(lit) = lit {
-        Ok(lit)
-    } else {
-        Err(())
-    }
-}
-
-pub fn parse_lit_into_expr_path(lit: &syn::Lit) -> Result<syn::ExprPath, ()> {
-    let string = get_lit_str(lit)?;
-    match parse_lit_str(string) {
-        Ok(r) => Ok(r),
-        Err(_) => {
-            let _ = format!("failed to parse path: {:?}", string.value());
-            Err(())
-            // panic!("{:?}", msg)
+fn get_lit_byte_str<'a>(expr: &syn::Expr) -> Result<&syn::LitByteStr, ()> {
+    if let syn::Expr::Lit(lit) = expr {
+        if let syn::Lit::ByteStr(l) = &lit.lit {
+            return Ok(l);
         }
     }
+    Err(())
+}
+
+fn get_lit_str<'a>(lit: &syn::Expr) -> Result<&syn::LitStr, ()> {
+    if let syn::Expr::Lit(lit) = lit {
+        if let syn::Lit::Str(l) = &lit.lit {
+            return Ok(&l);
+        }
+    }
+    Err(())
+}
+
+pub fn parse_lit_into_expr_path(value: &syn::Expr) -> Result<syn::ExprPath, ()> {
+    let l = get_lit_str(value)?;
+    parse_lit_str(l).map_err(|_| ())
 }
 
 pub fn parse_lit_str<T>(s: &syn::LitStr) -> parse::Result<T>
