@@ -13,6 +13,7 @@ pub fn get_ser_impl_block(input: DeriveInput) -> proc_macro2::TokenStream {
 
 fn get_ser_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
     let ident = &container.original.ident;
+    let (impl_generics, type_generics, where_clause) = container.original.generics.split_for_impl();
     let branches = container.enum_variants.iter().map(|v| {
         let f = v.ident;
         let name = &v.name;
@@ -30,7 +31,7 @@ fn get_ser_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
     });
     quote! {
         #[allow(unused_must_use)]
-        impl ::xmlserde::XmlSerialize for #ident {
+        impl #impl_generics ::xmlserde::XmlSerialize for #ident #type_generics #where_clause {
             fn serialize<W: std::io::Write>(
                 &self,
                 tag: &[u8],
@@ -164,6 +165,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
         }
     };
     let ident = &container.original.ident;
+    let (impl_generics, type_generics, where_clause) = container.original.generics.split_for_impl();
     let write_event = quote! {
         if is_empty {
             writer.write_event(Event::Empty(start));
@@ -185,7 +187,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
     };
     quote! {
         #[allow(unused_must_use)]
-        impl ::xmlserde::XmlSerialize for #ident {
+        impl #impl_generics ::xmlserde::XmlSerialize for #ident #type_generics #where_clause {
             fn serialize<W: std::io::Write>(
                 &self,
                 tag: &[u8],
