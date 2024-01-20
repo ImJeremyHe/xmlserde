@@ -10,14 +10,7 @@ keywords = ["xml", "serde"]
 readme = "README.md"
 
 [dependencies]
-convert_case = "0.6.0"
-paste = "1.0.12"
 quick-xml = {version = "0.31", features = ["serialize"]}
-regex = "1"
-serde = {version = "1.0.152", features = ["derive"]}
-serde_json = "1.0.59"
-serde_repr = "0.1"
-thiserror = "1.0.24"
 
 [dev-dependencies]
 xmlserde_derives = {path = "./derives", version = "0.6.0"}
