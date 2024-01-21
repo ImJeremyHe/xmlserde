@@ -12,8 +12,8 @@ You can check the detail of usage in the `workbook` directory or [here](https://
 `xmlserde` provides macros for you and in the most of cases, they are enough. You should import these crates in yout `Cargo.toml`:
 
 ```toml
-xmlserde = 0.6.0
-xmlserde_derives = 0.6.0
+xmlserde = 0.7.0
+xmlserde_derives = 0.7.0
 ```
 
 ### Deserialize
