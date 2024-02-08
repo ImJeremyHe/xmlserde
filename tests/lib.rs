@@ -21,6 +21,58 @@ mod tests {
     }
 
     #[test]
+    fn default_for_child() {
+        #[derive(XmlDeserialize, Default)]
+        #[xmlserde(root = b"property")]
+        struct Property {
+            #[xmlserde(name = b"name", ty = "attr")]
+            name: String,
+        }
+
+        #[derive(XmlDeserialize, Default)]
+        #[xmlserde(root = b"properties")]
+        struct InnerProperties {
+            #[xmlserde(name = b"property", ty = "child")]
+            properties: Vec<Property>,
+        }
+
+        #[derive(Default)]
+        struct Properties(Vec<Property>);
+
+        impl XmlDeserialize for Properties {
+            fn deserialize<B: std::io::prelude::BufRead>(
+                tag: &[u8],
+                reader: &mut xmlserde::quick_xml::Reader<B>,
+                attrs: xmlserde::quick_xml::events::attributes::Attributes,
+                is_empty: bool,
+            ) -> Self {
+                let inner = InnerProperties::deserialize(tag, reader, attrs, is_empty);
+                Self(inner.properties)
+            }
+        }
+
+        #[derive(XmlDeserialize)]
+        #[xmlserde(root = b"namespace")]
+        struct Namespace {
+            #[xmlserde(name = b"properties", ty = "child", default = "Properties::default")]
+            properties: Properties,
+        }
+
+        let xml = r#"<namespace>
+        </namespace>"#;
+        let result = xml_deserialize_from_str::<Namespace>(xml).unwrap();
+        assert!(result.properties.0.is_empty(),);
+
+        let xml = r#"<namespace>
+            <properties>
+                <property name="test" />
+            </properties>
+        </namespace>"#;
+        let result = xml_deserialize_from_str::<Namespace>(xml).unwrap();
+        assert_eq!(result.properties.0[0].name, "test",);
+    }
+
+    #[test]
     fn self_closed_boolean_child() {
         #[derive(XmlDeserialize, Default)]
         #[xmlserde(root = b"font")]

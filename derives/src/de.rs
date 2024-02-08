@@ -238,7 +238,7 @@ fn get_fields_init(fields: &FieldsSummary) -> proc_macro2::TokenStream {
         let ty = &f.original.ty;
         match &f.default {
             Some(p) => {
-                quote! {let mut #ident = #p;}
+                quote! {let mut #ident = #p();}
             }
             None => match f.generic {
                 Generic::Vec(v) => quote! {
