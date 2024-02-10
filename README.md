@@ -12,8 +12,8 @@ You can check the detail of usage in the `workbook` directory or [here](https://
 `xmlserde` offers a range of macros that should suffice for most use cases. To utilize them, you need to include the following crates in your `Cargo.toml` file:
 
 ```toml
-xmlserde = 0.7.1
-xmlserde_derives = 0.7.1
+xmlserde = 0.7
+xmlserde_derives = 0.7
 ```
 
 ### Deserialize
@@ -51,8 +51,8 @@ fn deserialize_person() {
 
 You are supposed to declare that where the deserializer is to look for the values.
 
-The commonly available *type*s are **attr**, **text** and **child**. In the above example, we instruct to program to navigate into the tag named `person` (using `xml_deserialize_from_str`), and to search for an attribute
-with the key `age`. Additionally it specifies that the content of the text element represents the value of the field `name``.
+The commonly available *type*s are **attr**, **text** and **child**. In the above example, we instruct program to navigate into the tag named `person` (using `xml_deserialize_from_str`), and to search for an attribute
+with the key `age`. Additionally it specifies that the content of the text element represents the value of the field `name`.
 
 You can specify the entry element for serialization/deserialization with xmlserde by using the annotation like `#[xmlserde(root = b"person")]`, thereby telling the program that the `person` element is the root for serde operations.
 
