@@ -9,11 +9,11 @@ You can check the detail of usage in the `workbook` directory or [here](https://
 
 ## How to use `xmlserde`
 
-`xmlserde` provides macros for you and in the most of cases, they are enough. You should import these crates in yout `Cargo.toml`:
+`xmlserde` offers a range of macros that should suffice for most use cases. To utilize them, you need to include the following crates in your `Cargo.toml` file:
 
 ```toml
-xmlserde = 0.7.0
-xmlserde_derives = 0.7.0
+xmlserde = 0.7.1
+xmlserde_derives = 0.7.1
 ```
 
 ### Deserialize
@@ -51,13 +51,12 @@ fn deserialize_person() {
 
 You are supposed to declare that where the deserializer is to look for the values.
 
-The common available *type*s are **attr**, **text** and **child**. In the above example, we told program that diving into the tag named *"person"* (xml_deserialize_from_str), and looking for an attribute
-whose key is*"age"* and that the content of the text element is the value of the field **name**.
+The commonly available *type*s are **attr**, **text** and **child**. In the above example, we instruct to program to navigate into the tag named `person` (using `xml_deserialize_from_str`), and to search for an attribute
+with the key `age`. Additionally it specifies that the content of the text element represents the value of the field `name``.
 
-You should tell the program that which element name is the entry for serde by
-doing something like `#[xmlserde(root = b"person")]`.
+You can specify the entry element for serialization/deserialization with xmlserde by using the annotation like `#[xmlserde(root = b"person")]`, thereby telling the program that the `person` element is the root for serde operations.
 
-Let's see an example of deserializing nested xml element.
+Below is an example illustrating how to deserialize a nested XML element:
 
 ```rs
 #[derive(XmlDeserialize)]
@@ -92,11 +91,10 @@ fn deserialize_person() {
 fn default_lefty() -> bool { false }
 ```
 
-In the example above, it is declared that the value of **name** is from a child whose tag is *"name"*.
-So the program will dive into `<name>` element and continue deserializing recursively.
+In the given example, we specify that the value of the `name` field is to be extracted from a child element tagged as `<name>`.
+Consequently, the program will navigate into the `<name>` element and proceed with recursive deserialization.
 
-Besides, we declare that if deserializer does not find the value of *lefty*
-and its default value of **lefty** is false.
+Additionally, we specify that if the deserializer does not find a value for `lefty`, the default value for `lefty` should be set to false.
 
 #### Vec
 
@@ -204,8 +202,8 @@ pub struct PersonB {
 
 #### Unparsed
 
-Sometimes we don't care about some xml element and we just want to keep them for future serializing.
-We provide a struct `Unparsed` to do this.
+In situations where certain XML elements are not immediately relevant, but you wish to retain them for future serialization, we offer the `Unparsed` struct
+for this purpose.
 
 ```rs
 use xmlserde::Unparsed;
@@ -219,8 +217,7 @@ pub struct Person {
 
 ### Serialize
 
-Serializing is almost the same as deserializing.
-But there are some features you should pay attention to.
+Serialization is largely similar to deserialization. However, there are several key features that require consideration.
 
 - default values will be skipped serializing.
 If it is a **struct**, it should be implemented `Eq` trait.
@@ -233,8 +230,10 @@ If it is a **struct**, it should be implemented `Eq` trait.
 
 ### Custom xmlserde
 
-`xmlserde` provides the trait `XmlSerialize` and `XmlDeserialize`, you
-can define a struct's behavior by implementing them.
+`xmlserde` offers the trait `XmlSerialize` and `XmlDeserialize`, allowing you
+to dictate a struct's serialization and deserialization behavior by implementing
+these traits.
+At present, only built-in types are permitted for use as attributes. To enable custom types for use in attributes, you can implement the `XmlValue` trait on those types.
 
 ### Enum for string type
 
