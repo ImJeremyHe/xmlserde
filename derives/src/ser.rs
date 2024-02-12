@@ -4,6 +4,7 @@ use crate::container::{Container, Derive, FieldsSummary, Generic, StructField};
 
 pub fn get_ser_impl_block(input: DeriveInput) -> proc_macro2::TokenStream {
     let container = Container::from_ast(&input, Derive::Serialize);
+    container.validate();
     if container.is_enum() {
         get_ser_enum_impl_block(container)
     } else {
@@ -17,16 +18,32 @@ fn get_ser_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
     let branches = container.enum_variants.iter().map(|v| {
         let f = v.ident;
         let name = &v.name;
-        quote! {
-            Self::#f(c) => {
-                if tag == b"" {
-                    c.serialize(#name, writer);
-                } else {
-                    let _ = writer.write_event(Event::Start(BytesStart::new(String::from_utf8_lossy(tag))));
-                    c.serialize(#name, writer);
-                    let _ = writer.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(tag))));
+        if v.ty.is_none() {
+            quote!{
+                Self::#f => {
+                    if tag == b"" {
+                        let  _t = String::from_utf8_lossy(#name);
+                        let _ = writer.write_event(Event::Empty(BytesStart::new(_t)));
+                    } else {
+                        let _ = writer.write_event(Event::Start(BytesStart::new(String::from_utf8_lossy(tag))));
+                        let  _t = String::from_utf8_lossy(#name);
+                        let _ = writer.write_event(Event::Empty(BytesStart::new(_t)));
+                        let _ = writer.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(tag))));
+                    }
                 }
-            },
+            }
+        } else {
+            quote! {
+                Self::#f(c) => {
+                    if tag == b"" {
+                        c.serialize(#name, writer);
+                    } else {
+                        let _ = writer.write_event(Event::Start(BytesStart::new(String::from_utf8_lossy(tag))));
+                        c.serialize(#name, writer);
+                        let _ = writer.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(tag))));
+                    }
+                },
+            }
         }
     });
     quote! {
@@ -154,7 +171,6 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
         let write_untags = untags.into_iter().map(|f| {
             let ident = f.original.ident.as_ref().unwrap();
             quote! {
-                println!("here");
                 self.#ident.serialize(b"", writer);
             }
         });
