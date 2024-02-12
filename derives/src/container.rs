@@ -23,6 +23,12 @@ impl<'a> Container<'a> {
         self.enum_variants.len() > 0
     }
 
+    pub fn validate(&self) {
+        if self.root.is_some() && self.is_enum() {
+            panic!("for clarity, enum should not have the root attribute. please use a struct to wrap the enum and set its type to untag")
+        }
+    }
+
     pub fn from_ast(item: &'a syn::DeriveInput, _derive: Derive) -> Container<'a> {
         let mut with_ns = Option::<syn::LitByteStr>::None;
         let mut custom_ns = Vec::<(syn::LitByteStr, syn::LitByteStr)>::new();
@@ -195,7 +201,7 @@ impl<'a> StructField<'a> {
             None
         } else {
             Some(StructField {
-                ty: ty.unwrap(),
+                ty: ty.expect("should has a ty"),
                 name,
                 skip_serializing,
                 default,
@@ -223,7 +229,7 @@ impl<'a> StructField<'a> {
 pub struct EnumVariant<'a> {
     pub name: syn::LitByteStr,
     pub ident: &'a syn::Ident,
-    pub ty: &'a syn::Type,
+    pub ty: Option<&'a syn::Type>,
 }
 
 impl<'a> EnumVariant<'a> {
@@ -244,10 +250,14 @@ impl<'a> EnumVariant<'a> {
                 _ => panic!("unexpected"),
             }
         }
-        let ty = &v.fields.iter().next().unwrap().ty;
+        if v.fields.len() > 1 {
+            panic!("only support 1 field");
+        }
+        let field = &v.fields.iter().next();
+        let ty = field.map(|t| &t.ty);
         let ident = &v.ident;
         EnumVariant {
-            name: name.unwrap(),
+            name: name.expect("no name attr is found"),
             ty,
             ident,
         }

@@ -580,4 +580,45 @@ mod tests {
             pub text: Option<String>,
         }
     }
+
+    #[test]
+    fn test_enum_no_type() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        struct Type {
+            #[xmlserde(name = b"name", ty = "attr")]
+            name: String,
+        }
+
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"parameter")]
+        struct Parameter {
+            #[xmlserde(ty = "untag")]
+            ty: ParameterType,
+        }
+
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        enum ParameterType {
+            #[xmlserde(name = b"varargs")]
+            VarArgs,
+            #[xmlserde(name = b"type")]
+            Type(Type),
+        }
+
+        let xml = r#"<parameter><varargs /></parameter>"#;
+        let p = xml_deserialize_from_str::<Parameter>(&xml).unwrap();
+        assert!(matches!(p.ty, ParameterType::VarArgs));
+
+        let expect = xml_serialize(p);
+        assert_eq!(expect, "<parameter><varargs/></parameter>");
+
+        let xml = r#"<parameter><type name="n"/></parameter>"#;
+        let p = xml_deserialize_from_str::<Parameter>(&xml).unwrap();
+        if let ParameterType::Type(t) = &p.ty {
+            assert_eq!(t.name, "n")
+        } else {
+            panic!("")
+        }
+        let expect = xml_serialize(p);
+        assert_eq!(expect, xml);
+    }
 }

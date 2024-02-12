@@ -4,6 +4,7 @@ use crate::container::{self, Container, EleType, FieldsSummary, Generic, StructF
 
 pub fn get_de_impl_block(input: DeriveInput) -> proc_macro2::TokenStream {
     let container = Container::from_ast(&input, container::Derive::Deserialize);
+    container.validate();
     if container.is_enum() {
         get_de_enum_impl_block(container)
     } else {
@@ -12,55 +13,38 @@ pub fn get_de_impl_block(input: DeriveInput) -> proc_macro2::TokenStream {
 }
 
 pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
+    macro_rules! event_branches {
+        ($attrs:expr, $b:expr) => {
+            container.enum_variants.iter().map(|v| {
+                let name = &v.name;
+                let ty = v.ty;
+                let ident = v.ident;
+                if let Some(ty) = ty {
+                    quote! {
+                        #name => {
+                            let _r = #ty::deserialize(#name, reader, $attrs, $b);
+                            return Self::#ident(_r);
+                        }
+                    }
+                } else {
+                    quote! {
+                        #name => {
+                            return Self::#ident;
+                        }
+                    }
+                }
+            })
+        };
+    }
     let ident = &container.original.ident;
     let (impl_generics, type_generics, where_clause) = container.original.generics.split_for_impl();
-    let event_start_branches = container.enum_variants.iter().map(|v| {
-        let name = &v.name;
-        let ty = v.ty;
-        let ident = v.ident;
-        quote! {
-            #name => {
-                let _r = #ty::deserialize(
-                    #name,
-                    reader,
-                    _s.attributes(),
-                    false,
-                );
-                result = Some(Self::#ident(_r));
-            }
-        }
-    });
-    let event_empty_branches = container.enum_variants.iter().map(|v| {
-        let name = &v.name;
-        let ty = v.ty;
-        let ident = v.ident;
-        quote! {
-            #name => {
-                let _r = #ty::deserialize(
-                    #name,
-                    reader,
-                    _s.attributes(),
-                    true,
-                );
-                result = Some(Self::#ident(_r));
-            }
-        }
-    });
+    let event_start_branches = event_branches!(_s.attributes(), false);
+    let event_empty_branches = event_branches!(_s.attributes(), true);
     let children_tags = container.enum_variants.iter().map(|v| {
         let name = &v.name;
         quote! {#name}
     });
-    let exact_tags = container.enum_variants.iter().map(|v| {
-        let name = &v.name;
-        let ty = v.ty;
-        let ident = v.ident;
-        quote! {
-            #name => {
-                let _r = #ty::deserialize(#name, reader, attrs, is_empty);
-                return Self::#ident(_r);
-            }
-        }
-    });
+    let exact_tags = event_branches!(attrs, is_empty);
     quote! {
         #[allow(unused_assignments)]
         impl #impl_generics ::xmlserde::XmlDeserialize for #ident #type_generics #where_clause {
@@ -95,7 +79,7 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
                         _ => {},
                     }
                 }
-                result.unwrap()
+                result.expect("did not find any tag")
             }
 
             fn __get_children_tags() -> Vec<&'static [u8]> {
@@ -362,8 +346,8 @@ fn attr_match_branch(field: StructField) -> proc_macro2::TokenStream {
         panic!("")
     }
     let t = &field.original.ty;
-    let tag = field.name.as_ref().unwrap();
-    let ident = field.original.ident.as_ref().unwrap();
+    let tag = field.name.as_ref().expect("should have a field name");
+    let ident = field.original.ident.as_ref().expect("should have ident");
     if field.generic.is_opt() {
         let opt_ty = field.generic.get_opt().unwrap();
         quote! {
@@ -411,7 +395,7 @@ fn text_match_branch(field: StructField) -> proc_macro2::TokenStream {
     if !matches!(field.ty, EleType::Text) {
         panic!("")
     }
-    let ident = field.original.ident.as_ref().unwrap();
+    let ident = field.original.ident.as_ref().expect("should have idnet");
     // let t = &field.original.ty;
     let (t, is_opt) = match field.generic {
         Generic::Vec(_) => panic!("text element should not be Vec<T>"),
