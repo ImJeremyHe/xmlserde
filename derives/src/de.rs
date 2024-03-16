@@ -13,10 +13,13 @@ pub fn get_de_impl_block(input: DeriveInput) -> proc_macro2::TokenStream {
 }
 
 pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
-    macro_rules! event_branches {
+    macro_rules! children_branches {
         ($attrs:expr, $b:expr) => {
             container.enum_variants.iter().map(|v| {
-                let name = &v.name;
+                if matches!(&v.ele_type, EleType::Text) {
+                    return quote! {};
+                }
+                let name = v.name.as_ref().expect("should have name");
                 let ty = v.ty;
                 let ident = v.ident;
                 if let Some(ty) = ty {
@@ -36,15 +39,44 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
             })
         };
     }
+    let mut text_opt = None;
+    let mut text_ident = None;
+    container.enum_variants.iter().for_each(|v| {
+        if !matches!(&v.ele_type, EleType::Text) {
+            return;
+        }
+
+        if let Some(_) = text_opt {
+            panic!("should only have one `text` type")
+        }
+
+        text_opt = Some(v.ty.expect("expect type"));
+        text_ident = Some(v.ident);
+    });
+
+    let text_function = if let Some(text_ty) = text_opt {
+        let ident = text_ident.expect("should have ident for text");
+        quote! {
+            fn __deserialize_from_text(s: &str) -> Option<Self> {
+                Some(Self::#ident(<#text_ty as ::xmlserde::XmlValue>::deserialize(s).unwrap()))
+            }
+        }
+    } else {
+        quote! {}
+    };
     let ident = &container.original.ident;
     let (impl_generics, type_generics, where_clause) = container.original.generics.split_for_impl();
-    let event_start_branches = event_branches!(_s.attributes(), false);
-    let event_empty_branches = event_branches!(_s.attributes(), true);
-    let children_tags = container.enum_variants.iter().map(|v| {
-        let name = &v.name;
-        quote! {#name}
-    });
-    let exact_tags = event_branches!(attrs, is_empty);
+    let event_start_branches = children_branches!(_s.attributes(), false);
+    let event_empty_branches = children_branches!(_s.attributes(), true);
+    let children_tags = container
+        .enum_variants
+        .iter()
+        .filter(|v| matches!(v.ele_type, EleType::Child))
+        .map(|v| {
+            let name = v.name.as_ref().expect("should have `name` for `child`");
+            quote! {#name}
+        });
+    let exact_tags = children_branches!(attrs, is_empty);
     quote! {
         #[allow(unused_assignments)]
         impl #impl_generics ::xmlserde::XmlDeserialize for #ident #type_generics #where_clause {
@@ -85,6 +117,8 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
             fn __get_children_tags() -> Vec<&'static [u8]> {
                 vec![#(#children_tags,)*]
             }
+
+            #text_function
         }
     }
 }
@@ -102,7 +136,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     } = summary;
     let get_children_tags = if children.len() > 0 {
         let names = children.iter().map(|f| {
-            let n = f.name.as_ref().unwrap();
+            let n = f.name.as_ref().expect("should have name");
             quote! {#n}
         });
         quote! {
@@ -409,7 +443,7 @@ fn text_match_branch(field: StructField) -> proc_macro2::TokenStream {
     };
     quote! {
         Ok(Event::Text(__s)) => {
-            use xmlserde::{XmlValue, XmlDeserialize};
+            use ::xmlserde::{XmlValue, XmlDeserialize};
             let __r = __s.unescape().unwrap();
             match #t::deserialize(&__r) {
                 Ok(__v) => {
@@ -424,7 +458,39 @@ fn text_match_branch(field: StructField) -> proc_macro2::TokenStream {
     }
 }
 
-fn untags_match_branch(fields: Vec<StructField>) -> proc_macro2::TokenStream {
+fn untag_text_enum_branches(untags: Vec<StructField>) -> proc_macro2::TokenStream {
+    if untags.len() == 0 {
+        return quote! {};
+    }
+
+    let mut branches: Vec<proc_macro2::TokenStream> = vec![];
+    untags.into_iter().for_each(|f| {
+        let ident = f.original.ident.as_ref().unwrap();
+        let ty = &f.original.ty;
+        let branch = match f.generic {
+            Generic::Vec(ty) => quote! {
+                if let Some(t) = #ty::__deserialize_from_text(&_str) {
+                    #ident.push(t);
+                }
+            },
+            Generic::Opt(ty) => quote! {
+                if let Some(t) = #ty::__deserialize_from_text(&_str) {
+                    #ident = Some(t);
+                }
+            },
+            Generic::None => quote! {
+                if let Some(t) = #ty::__deserialize_from_text(&_str) {
+                    #ident = Some(t);
+                }
+            },
+        };
+        branches.push(branch);
+    });
+
+    return quote! {#(#branches)*};
+}
+
+fn untags_match_branch(fields: &[StructField]) -> proc_macro2::TokenStream {
     if fields.len() == 0 {
         return quote! {};
     }
@@ -468,7 +534,7 @@ fn children_match_branch(
         if !matches!(f.ty, EleType::Child) {
             panic!("")
         }
-        let tag = f.name.as_ref().unwrap();
+        let tag = f.name.as_ref().expect("should have name");
         let ident = f.original.ident.as_ref().unwrap();
         let t = &f.original.ty;
         let branch = match f.generic {
@@ -508,7 +574,8 @@ fn children_match_branch(
         };
         branches.push(branch);
     });
-    let untags_branches = untags_match_branch(untags);
+    let untags_branches = untags_match_branch(&untags);
+    let untag_text_enum = untag_text_enum_branches(untags);
     quote! {
         Ok(Event::Empty(s)) => {
             let is_empty = true;
@@ -524,6 +591,14 @@ fn children_match_branch(
                 #(#branches)*
                 #untags_branches
                 _ => {},
+            }
+        }
+        Ok(Event::Text(t)) => {
+            use ::xmlserde::{XmlValue, XmlDeserialize};
+            let _str = t.unescape().expect("failed to unescape string");
+            let _str = _str.trim();
+            if _str != "" {
+                #untag_text_enum
             }
         }
     }

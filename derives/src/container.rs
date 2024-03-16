@@ -168,7 +168,7 @@ impl<'a> StructField<'a> {
                             "text" => EleType::Text,
                             "sfc" => EleType::SelfClosedChild,
                             "untag" => EleType::Untag,
-                            _ => panic!(""),
+                            _ => panic!("invalid type"),
                         };
                         ty = Some(t);
                     }
@@ -227,14 +227,16 @@ impl<'a> StructField<'a> {
 }
 
 pub struct EnumVariant<'a> {
-    pub name: syn::LitByteStr,
+    pub name: Option<syn::LitByteStr>,
     pub ident: &'a syn::Ident,
     pub ty: Option<&'a syn::Type>,
+    pub ele_type: EleType,
 }
 
 impl<'a> EnumVariant<'a> {
     pub fn from_ast(v: &'a Variant) -> Self {
         let mut name = Option::<syn::LitByteStr>::None;
+        let mut ele_type = EleType::Child;
         for meta_item in v
             .attrs
             .iter()
@@ -247,19 +249,37 @@ impl<'a> EnumVariant<'a> {
                         name = Some(s.clone());
                     }
                 }
-                _ => panic!("unexpected"),
+                NameValue(m) if m.path == TYPE => {
+                    if let Ok(s) = get_lit_str(&m.value) {
+                        let t = match s.value().as_str() {
+                            "child" => EleType::Child,
+                            "text" => EleType::Text,
+                            _ => panic!("invalid type in enum, should be `text` or `child` only"),
+                        };
+                        ele_type = t;
+                    }
+                }
+                _ => panic!("unexpected attribute"),
             }
         }
         if v.fields.len() > 1 {
             panic!("only support 1 field");
         }
+        if matches!(ele_type, EleType::Text) {
+            if name.is_some() {
+                panic!("should omit the `name`");
+            }
+        } else if name.is_none() {
+            panic!("should have name")
+        }
         let field = &v.fields.iter().next();
         let ty = field.map(|t| &t.ty);
         let ident = &v.ident;
         EnumVariant {
-            name: name.expect("no name attr is found"),
+            name,
             ty,
             ident,
+            ele_type,
         }
     }
 }
