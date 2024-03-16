@@ -582,7 +582,7 @@ mod tests {
     }
 
     #[test]
-    fn test_enum_no_type() {
+    fn test_untag_enum_no_type_child_and_text() {
         #[derive(Debug, XmlSerialize, XmlDeserialize)]
         struct Type {
             #[xmlserde(name = b"name", ty = "attr")]
@@ -602,6 +602,8 @@ mod tests {
             VarArgs,
             #[xmlserde(name = b"type")]
             Type(Type),
+            #[xmlserde(ty = "text")]
+            Text(String),
         }
 
         let xml = r#"<parameter><varargs /></parameter>"#;
@@ -619,6 +621,72 @@ mod tests {
             panic!("")
         }
         let expect = xml_serialize(p);
+        assert_eq!(expect, xml);
+
+        let xml = r#"<parameter>ttttt</parameter>"#;
+        let p = xml_deserialize_from_str::<Parameter>(&xml).unwrap();
+        assert!(matches!(p.ty, ParameterType::Text(_)));
+        let expect = xml_serialize(p);
+        assert_eq!(expect, xml);
+    }
+
+    #[test]
+    fn test_untag_enum_vec_and_text() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"text:p")]
+        pub struct TextP {
+            #[xmlserde(ty = "untag")]
+            pub text_p_content: Vec<TextPContent>,
+        }
+
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        pub enum TextPContent {
+            #[xmlserde(ty = "text")]
+            Text(String),
+            #[xmlserde(name = b"text:span", ty = "child")]
+            TextSpan(TextSpan),
+        }
+
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        pub struct TextSpan {
+            #[xmlserde(ty = "text", name = b"p")]
+            pub t: String,
+        }
+
+        let xml = r#"<text:p>
+            <text:span>text1</text:span>
+            <text:span>text2</text:span>
+        </text:p>"#;
+        let text_p = xml_deserialize_from_str::<TextP>(&xml).unwrap();
+        let content = &text_p.text_p_content;
+        assert_eq!(content.len(), 2);
+        if let TextPContent::TextSpan(span) = content.get(0).unwrap() {
+            assert_eq!(&span.t, "text1")
+        } else {
+            panic!("")
+        }
+        if let TextPContent::TextSpan(span) = content.get(1).unwrap() {
+            assert_eq!(&span.t, "text2")
+        } else {
+            panic!("")
+        }
+
+        let expect = xml_serialize(text_p);
+        assert_eq!(
+            expect,
+            "<text:p><text:span>text1</text:span><text:span>text2</text:span></text:p>"
+        );
+
+        let xml = r#"<text:p>abcdefg</text:p>"#;
+        let text_p = xml_deserialize_from_str::<TextP>(&xml).unwrap();
+        let content = &text_p.text_p_content;
+        assert_eq!(content.len(), 1);
+        if let TextPContent::Text(s) = content.get(0).unwrap() {
+            assert_eq!(s, "abcdefg")
+        } else {
+            panic!("")
+        };
+        let expect = xml_serialize(text_p);
         assert_eq!(expect, xml);
     }
 }

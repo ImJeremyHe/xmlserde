@@ -147,7 +147,10 @@ macro_rules! xml_serde_enum {
     };
 }
 
-use std::io::{BufRead, Write};
+use std::{
+    fmt::Debug,
+    io::{BufRead, Write},
+};
 
 // We republic the `quick_xml` here is for helping the `derives` crate import
 // it easily. In this way users don't need to import the `quick-xml` on
@@ -191,9 +194,17 @@ pub trait XmlDeserialize {
         None
     }
 
-    // Used when ty = `untag`.
+    // A helper function used when ty = `untag`. It could help
+    // us to find out the children tags when deserializing
     fn __get_children_tags() -> Vec<&'static [u8]> {
         vec![]
+    }
+
+    fn __deserialize_from_text(_: &str) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        None
     }
 }
 
@@ -307,7 +318,7 @@ where
 {
     let mut writer = quick_xml::Writer::new(Vec::new());
     obj.serialize(T::ser_root().expect("Expect root"), &mut writer);
-    String::from_utf8(writer.into_inner()).unwrap()
+    String::from_utf8(writer.into_inner()).expect("decode error")
 }
 
 /// The entry for deserializing. `T` should have declared the `root` by `#[xmlserde(root=b"")]`
@@ -393,6 +404,7 @@ impl XmlValue for bool {
     }
 
     fn deserialize(s: &str) -> Result<Self, String> {
+        let s = s.to_ascii_lowercase();
         if s == "1" || s == "true" {
             Ok(true)
         } else if s == "0" || s == "false" {
