@@ -596,8 +596,7 @@ fn children_match_branch(
         Ok(Event::Text(t)) => {
             use ::xmlserde::{XmlValue, XmlDeserialize};
             let _str = t.unescape().expect("failed to unescape string");
-            let _str = _str.trim();
-            if _str != "" {
+            if _str.trim() != "" {
                 #untag_text_enum
             }
         }

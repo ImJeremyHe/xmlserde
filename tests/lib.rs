@@ -120,7 +120,7 @@ mod tests {
             pub cnt: u32,
         }
         let xml = r#"<root cnt="2">
-            <f age="15">Tom</f>
+            <f age="15"> Tom</f>
             <f age="9">Jerry</f>
         </root>"#;
         let result = xml_deserialize_from_str::<Aa>(xml);
@@ -131,7 +131,7 @@ mod tests {
                 let mut child_iter = result.f.into_iter();
                 let first = child_iter.next().unwrap();
                 assert_eq!(first.age, 15);
-                assert_eq!(first.name, String::from("Tom"));
+                assert_eq!(first.name, String::from(" Tom"));
                 let second = child_iter.next().unwrap();
                 assert_eq!(second.age, 9);
                 assert_eq!(second.name, String::from("Jerry"));
@@ -654,14 +654,14 @@ mod tests {
         }
 
         let xml = r#"<text:p>
-            <text:span>text1</text:span>
+            <text:span> text1 </text:span>
             <text:span>text2</text:span>
         </text:p>"#;
         let text_p = xml_deserialize_from_str::<TextP>(&xml).unwrap();
         let content = &text_p.text_p_content;
         assert_eq!(content.len(), 2);
         if let TextPContent::TextSpan(span) = content.get(0).unwrap() {
-            assert_eq!(&span.t, "text1")
+            assert_eq!(&span.t, " text1 ")
         } else {
             panic!("")
         }
@@ -674,7 +674,7 @@ mod tests {
         let expect = xml_serialize(text_p);
         assert_eq!(
             expect,
-            "<text:p><text:span>text1</text:span><text:span>text2</text:span></text:p>"
+            "<text:p><text:span> text1 </text:span><text:span>text2</text:span></text:p>"
         );
 
         let xml = r#"<text:p>abcdefg</text:p>"#;
