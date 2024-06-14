@@ -1,6 +1,6 @@
 [package]
 name = "xmlserde_derives"
-version = "0.8.1"
+version = "0.9.0"
 description = "macros that help xmlserde serde the xml files"
 authors = ["ImJeremyHe<yiliang.he@qq.com>"]
 license = "MIT"
