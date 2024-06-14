@@ -176,11 +176,11 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     };
     let encounter_unknown_branch = quote! {
         Ok(Event::Empty(_s)) => {
-            let _field = _s.name().into_inner().to_string();
+            let _field = _s.name();
             #encounter_unknown
         }
         Ok(Event::Start(_s)) => {
-            let _field = _s.name().into_inner().to_string();
+            let _field = _s.name();
             #encounter_unknown
         }
     };
