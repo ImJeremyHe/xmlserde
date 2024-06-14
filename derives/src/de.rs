@@ -170,17 +170,17 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
         quote! {}
     };
     let encounter_unknown = if container.deny_unknown {
-        quote! {panic!("encoutnering unknown field: {:?}", _field)}
+        quote! {panic!("encoutnering unknown field: {#:?}", _field)}
     } else {
         quote! {}
     };
     let encounter_unknown_branch = quote! {
         Ok(Event::Empty(_s)) => {
-            let _field = _s.name();
+            let _field = std::str::from_utf8(_s.name().into_inner());
             #encounter_unknown
         }
-        Ok(Event::Start(_s)) => {
-            let _field = _s.name();
+        Ok(Event::Start(_s)) => {{
+            let _field = std::str::from_utf8(_s.name().into_inner());
             #encounter_unknown
         }
     };
@@ -199,7 +199,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                         match attr.key.into_inner() {
                             #(#attr_branches)*
                             _ => {
-                                let _field = attr.key.into_inner();
+                                let _field = std::str::from_utf8(attr.key.into_inner());
                                 #encounter_unknown;
                             },
                         }
