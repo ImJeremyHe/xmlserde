@@ -340,7 +340,6 @@ where
     R: BufRead,
 {
     let mut reader = quick_xml::Reader::from_reader(reader);
-    reader.trim_text(false);
     let mut buf = Vec::<u8>::new();
     let root = T::de_root().expect(r#"#[xmlserde(root = b"tag")]"#);
     loop {
