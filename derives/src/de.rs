@@ -169,6 +169,21 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     } else {
         quote! {}
     };
+    let encounter_unknown = if container.deny_unknown {
+        quote! {panic!("encoutnering unknown field: {_filed:?}")}
+    } else {
+        quote! {}
+    };
+    let encounter_unknown_branch = quote! {
+        Ok(Event::Empty(_s)) => {
+            let _field = _s.name().into_inner();
+            #encounter_unknown
+        }
+        Ok(Event::Start(_s)) => {
+            let _field = _s.name().into_inner();
+            #encounter_unknown
+        }
+    };
     quote! {
         #[allow(unused_assignments)]
         impl #impl_generics ::xmlserde::XmlDeserialize for #ident #type_generics #where_clause {
@@ -183,7 +198,10 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                     if let Ok(attr) = attr {
                         match attr.key.into_inner() {
                             #(#attr_branches)*
-                            _ => {},
+                            _ => {
+                                let _field = attr.key.into_inner();
+                                #encounter_unknown;
+                            },
                         }
                     }
                 });
@@ -199,6 +217,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                             #sfc_branch
                             #child_branches
                             #text_branch
+                            #encounter_unknown_branch
                             Ok(Event::Eof) => break,
                             Err(_) => break,
                             _ => {},

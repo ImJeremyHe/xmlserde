@@ -689,4 +689,56 @@ mod tests {
         let expect = xml_serialize(text_p);
         assert_eq!(expect, xml);
     }
+
+    #[test]
+    #[should_panic]
+    fn test_unknown_fields_in_struct_deny_unknown_attr() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"pet")]
+        #[xmlserde(deny_unknown_fields)]
+        pub struct Pet {
+            #[xmlserde(ty = "attr", name = b"name")]
+            pub name: String,
+        }
+        let xml = r#"<pet name="Chaplin" age="1"/>"#;
+        let _ = xml_deserialize_from_str::<Pet>(&xml);
+    }
+
+    #[test]
+    fn test_unknown_fields_in_struct_accept_unknown_attr() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"pet")]
+        pub struct Pet {
+            #[xmlserde(ty = "attr", name = b"name")]
+            pub name: String,
+        }
+        let xml = r#"<pet name="Chaplin" age="1"/>"#;
+        let _ = xml_deserialize_from_str::<Pet>(&xml);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_unknown_fields_in_struct_deny_unknown_field() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"pet")]
+        #[xmlserde(deny_unknown_fields)]
+        pub struct Pet {
+            #[xmlserde(ty = "attr", name = b"name")]
+            pub name: String,
+        }
+        let xml = r#"<pet name="Chaplin"><weight/></pet>"#;
+        let _ = xml_deserialize_from_str::<Pet>(&xml);
+    }
+
+    #[test]
+    fn test_unknown_fields_in_struct_accept_unknown_field() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"pet")]
+        pub struct Pet {
+            #[xmlserde(ty = "attr", name = b"name")]
+            pub name: String,
+        }
+        let xml = r#"<pet name="Chaplin"><weight/></pet>"#;
+        let _ = xml_deserialize_from_str::<Pet>(&xml);
+    }
 }
