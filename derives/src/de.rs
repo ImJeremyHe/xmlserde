@@ -179,7 +179,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
             let _field = std::str::from_utf8(_s.name().into_inner());
             #encounter_unknown
         }
-        Ok(Event::Start(_s)) => {{
+        Ok(Event::Start(_s)) => {
             let _field = std::str::from_utf8(_s.name().into_inner());
             #encounter_unknown
         }
