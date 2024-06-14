@@ -4,6 +4,7 @@ use syn::{Ident, Path};
 #[derive(Copy, Clone)]
 pub struct Symbol(&'static str);
 
+pub const DENY_UNKNOWN: Symbol = Symbol("deny_unknown_fields");
 pub const WITH_NS: Symbol = Symbol("with_ns");
 pub const WITH_CUSTOM_NS: Symbol = Symbol("with_custom_ns");
 pub const ROOT: Symbol = Symbol("root");

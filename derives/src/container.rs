@@ -1,5 +1,6 @@
 use crate::symbol::{
-    DEFAULT, NAME, ROOT, SKIP_SERIALIZING, TYPE, VEC_SIZE, WITH_CUSTOM_NS, WITH_NS, XML_SERDE,
+    DEFAULT, DENY_UNKNOWN, NAME, ROOT, SKIP_SERIALIZING, TYPE, VEC_SIZE, WITH_CUSTOM_NS, WITH_NS,
+    XML_SERDE,
 };
 use proc_macro2::{Group, Span, TokenStream, TokenTree};
 use syn::parse::{self, Parse};
@@ -16,6 +17,7 @@ pub struct Container<'a> {
     pub with_ns: Option<syn::LitByteStr>,
     pub custom_ns: Vec<(syn::LitByteStr, syn::LitByteStr)>,
     pub root: Option<syn::LitByteStr>,
+    pub deny_unknown: bool,
 }
 
 impl<'a> Container<'a> {
@@ -27,12 +29,16 @@ impl<'a> Container<'a> {
         if self.root.is_some() && self.is_enum() {
             panic!("for clarity, enum should not have the root attribute. please use a struct to wrap the enum and set its type to untag")
         }
+        if self.deny_unknown && self.is_enum() {
+            panic!("`deny_unknown_fields` is not supported in enum type")
+        }
     }
 
     pub fn from_ast(item: &'a syn::DeriveInput, _derive: Derive) -> Container<'a> {
         let mut with_ns = Option::<syn::LitByteStr>::None;
         let mut custom_ns = Vec::<(syn::LitByteStr, syn::LitByteStr)>::new();
         let mut root = Option::<syn::LitByteStr>::None;
+        let mut deny_unknown = false;
         for meta_item in item
             .attrs
             .iter()
@@ -48,6 +54,9 @@ impl<'a> Container<'a> {
                 NameValue(m) if m.path == ROOT => {
                     let s = get_lit_byte_str(&m.value).expect("parse root failed");
                     root = Some(s.clone());
+                }
+                Meta::Path(p) if p == DENY_UNKNOWN => {
+                    deny_unknown = true;
                 }
                 Meta::List(l) if l.path == WITH_CUSTOM_NS => {
                     let strs = l
@@ -80,6 +89,7 @@ impl<'a> Container<'a> {
                     with_ns,
                     custom_ns,
                     root,
+                    deny_unknown,
                 }
             }
             syn::Data::Enum(e) => {
@@ -95,6 +105,7 @@ impl<'a> Container<'a> {
                     with_ns,
                     custom_ns,
                     root,
+                    deny_unknown,
                 }
             }
             syn::Data::Union(_) => panic!("Only support struct and enum type, union is found"),
