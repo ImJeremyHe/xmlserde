@@ -2,7 +2,7 @@
 authors = ["ImJeremyHe<yiliang.he@qq.com>"]
 edition = "2018"
 name = "xmlserde"
-version = "0.9.0"
+version = "0.9.1"
 license = "MIT"
 description = "useful tool for serializing and deserializing xml"
 repository = "https://github.com/ImJeremyHe/xmlserde"
@@ -13,4 +13,4 @@ readme = "README.md"
 quick-xml = {version = "0.32", features = ["serialize"]}
 
 [dev-dependencies]
-xmlserde_derives = {path = "./derives", version = "0.9.0"}
+xmlserde_derives = {path = "./derives", version = "0.9.1"}
