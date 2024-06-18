@@ -170,7 +170,10 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
         quote! {}
     };
     let encounter_unknown = if container.deny_unknown {
-        quote! {panic!("encoutnering unknown field: {_filed:?}")}
+        quote! {
+            let _field = std::str::from_utf8(_field).unwrap();
+            panic!("encoutnering unknown field: {:#?}", _field)
+        }
     } else {
         quote! {}
     };
