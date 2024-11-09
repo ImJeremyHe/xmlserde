@@ -195,6 +195,9 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
     let write_event = quote! {
         if is_empty {
             writer.write_event(Event::Empty(start));
+        } else if is_untagged {
+            // Not to write the start event
+            #write_text_or_children
         } else {
             writer.write_event(Event::Start(start));
             #write_text_or_children
@@ -224,6 +227,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
                 use ::xmlserde::XmlValue;
                 let start = BytesStart::new(String::from_utf8_lossy(tag));
                 let mut attrs = Vec::<Attribute>::new();
+                let is_untagged = tag.len() == 0;
                 #write_ns
                 #write_custom_ns
                 #(#build_attr_and_push)*
@@ -259,7 +263,7 @@ fn init_is_empty(
             },
         }
     });
-    let has_untags = untags.len() > 0;
+    let has_untag_fields = untags.len() > 0;
     let scf_init = scf.iter().map(|s| {
         let ident = s.original.ident.as_ref().unwrap();
         quote! {
@@ -297,7 +301,7 @@ fn init_is_empty(
         });
         quote! {
             let has_child_to_write = #(#idents ||)* has_text;
-            let is_empty = !has_child_to_write && !#has_untags;
+            let is_empty = !has_child_to_write && !#has_untag_fields;
         }
     };
     quote! {

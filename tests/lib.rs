@@ -145,9 +145,9 @@ mod tests {
         #[derive(XmlDeserialize, Default)]
         pub struct Child {
             #[xmlserde(name = b"age", ty = "attr")]
-            pub age: u16,
+            pub _age: u16,
             #[xmlserde(ty = "text")]
-            pub name: String,
+            pub _name: String,
         }
         fn default_zero() -> u32 {
             0
@@ -158,7 +158,7 @@ mod tests {
             #[xmlserde(name = b"f", ty = "child", vec_size = 10)]
             pub f: Vec<Child>,
             #[xmlserde(name = b"cnt", ty = "attr", default = "default_zero")]
-            pub cnt: u32,
+            pub _cnt: u32,
         }
         let xml = r#"<root cnt="2">
             <f age="15">Tom</f>
@@ -701,7 +701,7 @@ mod tests {
             pub name: String,
         }
         let xml = r#"<pet name="Chaplin" age="1"/>"#;
-        let _ = xml_deserialize_from_str::<Pet>(&xml);
+        let _ = xml_deserialize_from_str::<Pet>(&xml).unwrap();
     }
 
     #[test]
@@ -713,7 +713,7 @@ mod tests {
             pub name: String,
         }
         let xml = r#"<pet name="Chaplin" age="1"/>"#;
-        let _ = xml_deserialize_from_str::<Pet>(&xml);
+        let _ = xml_deserialize_from_str::<Pet>(&xml).unwrap();
     }
 
     #[test]
@@ -727,7 +727,7 @@ mod tests {
             pub name: String,
         }
         let xml = r#"<pet name="Chaplin"><weight/></pet>"#;
-        let _ = xml_deserialize_from_str::<Pet>(&xml);
+        let _ = xml_deserialize_from_str::<Pet>(&xml).unwrap();
     }
 
     #[test]
@@ -739,6 +739,36 @@ mod tests {
             pub name: String,
         }
         let xml = r#"<pet name="Chaplin"><weight/></pet>"#;
-        let _ = xml_deserialize_from_str::<Pet>(&xml);
+        let _ = xml_deserialize_from_str::<Pet>(&xml).unwrap();
+    }
+
+    // https://github.com/ImJeremyHe/xmlserde/issues/52
+    #[test]
+    fn test_issue_52() {
+        #[derive(XmlSerialize)]
+        #[xmlserde(root = b"root")]
+        struct Wrapper<T: XmlSerialize> {
+            #[xmlserde(name = b"header", ty = "attr")]
+            header: String,
+            #[xmlserde(ty = "untag")]
+            body: T,
+        }
+
+        #[derive(XmlSerialize)]
+        struct Foo {
+            #[xmlserde(name = b"Bar", ty = "child")]
+            bar: Bar,
+        }
+
+        #[derive(XmlSerialize)]
+        struct Bar {}
+
+        let wrapper = Wrapper {
+            header: "".to_string(),
+            body: Foo { bar: Bar {} },
+        };
+
+        let r = xml_serialize(wrapper);
+        assert_eq!(r, r#"<root header=""><Bar/></root>"#);
     }
 }
