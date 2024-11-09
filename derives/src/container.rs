@@ -32,6 +32,8 @@ impl<'a> Container<'a> {
         if self.deny_unknown && self.is_enum() {
             panic!("`deny_unknown_fields` is not supported in enum type")
         }
+
+        self.struct_fields.iter().for_each(|f| f.validate());
     }
 
     pub fn from_ast(item: &'a syn::DeriveInput, _derive: Derive) -> Container<'a> {
@@ -152,6 +154,8 @@ pub struct StructField<'a> {
 }
 
 impl<'a> StructField<'a> {
+    pub fn validate(&self) {}
+
     pub fn from_ast(f: &'a syn::Field) -> Option<Self> {
         let mut name = Option::<syn::LitByteStr>::None;
         let mut skip_serializing = false;
