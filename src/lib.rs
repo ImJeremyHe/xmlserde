@@ -243,7 +243,7 @@ impl XmlSerialize for Unparsed {
         if self.data.len() > 0 {
             let _ = writer.write_event(Event::Start(start));
             self.data.iter().for_each(|e| {
-                let _ = writer.write_event(e);
+                let _ = writer.write_event(e.clone());
             });
             let _ = writer.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(tag))));
         } else {
