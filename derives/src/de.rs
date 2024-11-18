@@ -119,6 +119,10 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
             }
 
             #text_function
+
+            fn __is_enum() -> bool {
+                true
+            }
         }
     }
 }
@@ -127,12 +131,14 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     let result = get_result(&container.struct_fields);
     let summary = FieldsSummary::from_fields(container.struct_fields);
     let fields_init = get_fields_init(&summary);
+    let result_untagged_structs = get_untagged_struct_fields_result(&summary.untagged_structs);
     let FieldsSummary {
         children,
         text,
         attrs,
         self_closed_children,
-        untags,
+        untagged_enums,
+        untagged_structs,
     } = summary;
     let get_children_tags = if children.len() > 0 {
         let names = children.iter().map(|f| {
@@ -147,9 +153,11 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     } else {
         quote! {}
     };
+    let attr_len = attrs.len();
+    let sfc_len = self_closed_children.len();
     let vec_init = get_vec_init(&children);
     let attr_branches = attrs.into_iter().map(|a| attr_match_branch(a));
-    let child_branches = children_match_branch(children, untags);
+    let child_branches = children_match_branch(&children, &untagged_enums, &untagged_structs);
     let sfc_branch = sfc_match_branch(self_closed_children);
     let ident = &container.original.ident;
     let (impl_generics, type_generics, where_clause) = container.original.generics.split_for_impl();
@@ -166,6 +174,13 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                 Some(#r)
             }
         }
+    } else {
+        quote! {}
+    };
+
+    // Only those structs with only children can be untagged
+    let deserialize_from_unparsed = if children.len() > 0 && attr_len == 0 && sfc_len == 0 {
+        get_deserialize_from_unparsed(&children)
     } else {
         quote! {}
     };
@@ -227,15 +242,41 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                         }
                     }
                 }
+                #result_untagged_structs
                 Self {
                     #result
                 }
             }
             #get_root
             #get_children_tags
+            #deserialize_from_unparsed
         }
 
     }
+}
+
+fn get_untagged_struct_fields_result(fileds: &[StructField]) -> proc_macro2::TokenStream {
+    let branch = fileds.iter().map(|f| {
+        let ident = f.original.ident.as_ref().unwrap();
+        let ty = &f.original.ty;
+        let ident_unparsed_array = format_ident!("{}_unparseds", ident);
+        let ident_opt_unparsed_array = format_ident!("{}_opt_unparseds", ident);
+        match f.generic {
+            Generic::Vec(_) => unreachable!(),
+            Generic::Opt(_t) => quote! {
+                if #ident_opt_unparsed_array .len() > 0 {
+                    #ident = Some(#_t::__deserialize_from_unparsed_array(#ident_opt_unparsed_array));
+                }
+            },
+            Generic::None => quote! {
+                if #ident_unparsed_array.len() > 0 {
+                    #ident = Some(#ty::__deserialize_from_unparsed_array(#ident_unparsed_array));
+                }
+            },
+        }
+    });
+
+    quote! {#(#branch)*}
 }
 
 fn get_result(fields: &[StructField]) -> proc_macro2::TokenStream {
@@ -278,7 +319,9 @@ fn get_fields_init(fields: &FieldsSummary) -> proc_macro2::TokenStream {
         let ty = &f.original.ty;
         match &f.default {
             Some(p) => {
-                quote! {let mut #ident = #p();}
+                quote! {
+                    let mut #ident = #p();
+                }
             }
             None => match f.generic {
                 Generic::Vec(v) => quote! {
@@ -319,8 +362,13 @@ fn get_fields_init(fields: &FieldsSummary) -> proc_macro2::TokenStream {
             let mut #ident = false;
         }
     });
-    let untag_init = fields.untags.iter().map(|f| {
+    let untagged_enums_init = fields.untagged_enums.iter().map(|f| {
         let ident = f.original.ident.as_ref().unwrap();
+
+        if let Some(path) = &f.default {
+            return quote! {let mut #ident = #path();};
+        }
+
         let ty = &f.original.ty;
         match f.generic {
             Generic::Vec(t) => quote! {
@@ -334,12 +382,123 @@ fn get_fields_init(fields: &FieldsSummary) -> proc_macro2::TokenStream {
             },
         }
     });
+
+    let untagged_structs_init = fields.untagged_structs.iter().map(|f| {
+        let ident = f.original.ident.as_ref().unwrap();
+        if let Some(path) = &f.default {
+            return quote! {let mut #ident = #path();};
+        }
+        let ident_unparsed_array = format_ident!("{}_unparseds", ident);
+        let ident_opt_unparsed_array = format_ident!("{}_opt_unparseds", ident);
+
+        let ty = &f.original.ty;
+        match f.generic {
+            Generic::Vec(_t) => quote! {
+                unreachable!()
+            },
+            Generic::Opt(t) => quote! {
+                let mut #ident = Option::<#t>::None;
+                let mut #ident_opt_unparsed_array = Vec::new();
+            },
+            Generic::None => quote! {
+                let mut #ident = Option::<#ty>::None;
+                let mut #ident_unparsed_array = Vec::new();
+            },
+        }
+    });
     quote! {
         #(#attrs_inits)*
         #(#sfc_init)*
         #(#children_inits)*
         #text_init
-        #(#untag_init)*
+        #(#untagged_enums_init)*
+        #(#untagged_structs_init)*
+    }
+}
+
+fn get_deserialize_from_unparsed(children: &[StructField]) -> proc_macro2::TokenStream {
+    let init = children.iter().map(|c| {
+        let ident = c.original.ident.as_ref().unwrap();
+        if let Some(path) = &c.default {
+            return quote! {
+                let mut #ident = #path();
+            };
+        }
+        match &c.generic {
+            Generic::Vec(_) => quote! {let mut #ident = vec![];},
+            Generic::Opt(_) => quote! {let mut #ident = None;},
+            Generic::None => quote! {let mut #ident = None;},
+        }
+    });
+    let body = children.iter().map(|c| {
+        let name = c
+            .name
+            .as_ref()
+            .expect("types can not have recursive untagged fields");
+        let original_type = &c.original.ty;
+        let ident = c.original.ident.as_ref().unwrap();
+        match &c.generic {
+            Generic::Vec(t) => {
+                quote! {
+                    #name => {
+                        #ident.push(content.deserialize_to::<#t>().unwrap());
+                    },
+                }
+            }
+            Generic::Opt(t) => {
+                quote! {
+                    #name => {
+                        #ident = Some(content.deserialize_to::<#t>().unwrap());
+                    },
+                }
+            }
+            Generic::None => {
+                if c.default.is_some() {
+                    quote! {
+                        #name => {
+                            #ident = content.deserialize_to::<#original_type>().unwrap();
+                        }
+                    }
+                } else {
+                    quote! {
+                        #name => {
+                            #ident = Some(content.deserialize_to::<#original_type>().unwrap());
+                        }
+                    }
+                }
+            }
+        }
+    });
+    let result = {
+        let idents = children.iter().map(|c| {
+            let ident = c.original.ident.as_ref().unwrap();
+            if c.is_required() {
+                quote! {
+                    #ident: #ident.expect("missing field")
+                }
+            } else {
+                quote! {
+                    #ident
+                }
+            }
+        });
+        quote! {
+            Self {
+                #(#idents),*
+            }
+        }
+    };
+    quote! {
+        fn __deserialize_from_unparsed_array(array: Vec<(&'static [u8], ::xmlserde::Unparsed)>) -> Self {
+            #(#init)*
+            array.into_iter().for_each(|(tag, content)| {
+                match tag {
+                    #(#body),*
+                    _ => {},
+                }
+            });
+            #result
+        }
     }
 }
 
@@ -480,7 +639,7 @@ fn text_match_branch(field: StructField) -> proc_macro2::TokenStream {
     }
 }
 
-fn untag_text_enum_branches(untags: Vec<StructField>) -> proc_macro2::TokenStream {
+fn untag_text_enum_branches(untags: &[StructField]) -> proc_macro2::TokenStream {
     if untags.len() == 0 {
         return quote! {};
     }
@@ -512,7 +671,7 @@ fn untag_text_enum_branches(untags: Vec<StructField>) -> proc_macro2::TokenStrea
     return quote! {#(#branches)*};
 }
 
-fn untags_match_branch(fields: &[StructField]) -> proc_macro2::TokenStream {
+fn untag_enums_match_branch(fields: &[StructField]) -> proc_macro2::TokenStream {
     if fields.len() == 0 {
         return quote! {};
     }
@@ -544,11 +703,50 @@ fn untags_match_branch(fields: &[StructField]) -> proc_macro2::TokenStream {
     }
 }
 
+fn untag_structs_match_branch(fields: &[StructField]) -> proc_macro2::TokenStream {
+    if fields.len() == 0 {
+        return quote! {};
+    }
+    let mut branches: Vec<proc_macro2::TokenStream> = vec![];
+
+    fields.iter().for_each(|f| {
+        let ident = f.original.ident.as_ref().unwrap();
+        let ty = &f.original.ty;
+        let ident_unparsed_array = format_ident!("{}_unparseds", ident);
+        let ident_opt_unparsed_array = format_ident!("{}_opt_unparseds", ident);
+        // let name = f.name.as_ref().expect("should have `name` for `child` type");
+        let branch = match f.generic {
+            Generic::Vec(_) => unreachable!(),
+            Generic::Opt(t) => quote! {
+                _t if #t::__get_children_tags().contains(&_t) => {
+                    let _r = ::xmlserde::Unparsed::deserialize(_t, reader, s.attributes(), is_empty);
+                    let _tags = #t::__get_children_tags();
+                    let idx = _tags.binary_search(&_t).unwrap();
+                    #ident_opt_unparsed_array.push((_tags[idx], _r));
+                }
+            },
+            Generic::None => quote! {
+                _t if #ty::__get_children_tags().contains(&_t) => {
+                    let _r = ::xmlserde::Unparsed::deserialize(_t, reader, s.attributes(), is_empty);
+                    let _tags = #ty::__get_children_tags();
+                    let idx = _tags.binary_search(&_t).unwrap();
+                    #ident_unparsed_array.push((_tags[idx], _r));
+                }
+            },
+        };
+        branches.push(branch);
+    });
+    quote! {
+        #(#branches)*
+    }
+}
+
 fn children_match_branch(
-    fields: Vec<StructField>,
-    untags: Vec<StructField>,
+    fields: &[StructField],
+    untagged_enums: &[StructField],
+    untagged_structs: &[StructField],
 ) -> proc_macro2::TokenStream {
-    if fields.len() == 0 && untags.len() == 0 {
+    if fields.is_empty() && untagged_enums.is_empty() && untagged_structs.is_empty() {
         return quote! {};
     }
     let mut branches = vec![];
@@ -596,14 +794,17 @@ fn children_match_branch(
         };
         branches.push(branch);
     });
-    let untags_branches = untags_match_branch(&untags);
-    let untag_text_enum = untag_text_enum_branches(untags);
+    let untagged_enums_branches = untag_enums_match_branch(&untagged_enums);
+    let untagged_structs_branches = untag_structs_match_branch(&untagged_structs);
+    let untag_text_enum = untag_text_enum_branches(untagged_enums);
+
     quote! {
         Ok(Event::Empty(s)) => {
             let is_empty = true;
             match s.name().into_inner() {
                 #(#branches)*
-                #untags_branches
+                #untagged_enums_branches
+                #untagged_structs_branches
                 _ => {},
             }
         }
@@ -611,7 +812,8 @@ fn children_match_branch(
             let is_empty = false;
             match s.name().into_inner() {
                 #(#branches)*
-                #untags_branches
+                #untagged_enums_branches
+                #untagged_structs_branches
                 _ => {},
             }
         }

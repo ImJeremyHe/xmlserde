@@ -97,7 +97,8 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
         text,
         attrs,
         self_closed_children,
-        untags,
+        untagged_enums: untags,
+        untagged_structs: _,
     } = FieldsSummary::from_fields(container.struct_fields);
     if text.is_some() && (children.len() > 0 || self_closed_children.len() > 0 || untags.len() > 0)
     {

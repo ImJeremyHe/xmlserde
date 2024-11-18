@@ -156,6 +156,7 @@ use std::{
 // it easily. In this way users don't need to import the `quick-xml` on
 // their own.
 pub use quick_xml;
+
 use quick_xml::events::Event;
 
 pub trait XmlSerialize {
@@ -182,7 +183,7 @@ impl<T: XmlSerialize> XmlSerialize for Vec<T> {
     }
 }
 
-pub trait XmlDeserialize {
+pub trait XmlDeserialize: Sized {
     fn deserialize<B: BufRead>(
         tag: &[u8],
         reader: &mut quick_xml::Reader<B>,
@@ -194,10 +195,29 @@ pub trait XmlDeserialize {
         None
     }
 
-    // A helper function used when ty = `untag`. It could help
-    // us to find out the children tags when deserializing
+    /// A helper function used when ty = `untag`. It could help
+    /// us to find out the children tags when deserializing
     fn __get_children_tags() -> Vec<&'static [u8]> {
         vec![]
+    }
+
+    /// A helper function used when handling the untag types.
+    ///
+    /// For a outside struct, it doesn't
+    /// know how to deal with an untag type. The current solution is to treat them as `Unparsed`
+    /// types first, and then pass them into this function to deserialize. Since the type is untagged,
+    /// it doesn't require the attributes.
+    fn __deserialize_from_unparsed_array(_array: Vec<(&'static [u8], Unparsed)>) -> Self {
+        unreachable!("untagged types require having `child` types only")
+    }
+
+    /// A helper function for handling the untagged types.
+    ///
+    /// For efficiency, deserializing enums has no need to handle the untagged types by `__deserialize_from_unparsed_array` method.
+    /// But we have no idea of whether this field is not enum or not, we make a helper function to discern it
+    /// in the runtime.
+    fn __is_enum() -> bool {
+        false
     }
 
     fn __deserialize_from_text(_: &str) -> Option<Self>
@@ -290,6 +310,27 @@ impl XmlDeserialize for Unparsed {
             attrs: attrs_vec,
         }
     }
+
+    fn __deserialize_from_unparsed_array(_array: Vec<(&'static [u8], Unparsed)>) -> Self {
+        unreachable!(
+            r#"seems you are using a struct having `attrs` or `text` as an UntaggedStruct"#
+        )
+    }
+}
+
+impl Unparsed {
+    pub fn deserialize_to<T>(self) -> Result<T, String>
+    where
+        T: XmlDeserialize + Sized,
+    {
+        // TODO: Find a more efficient way
+        let mut writer = quick_xml::Writer::new(Vec::new());
+        let t = b"tmptag";
+        self.serialize(t, &mut writer);
+        let result = writer.into_inner();
+
+        xml_deserialize_from_reader_with_root::<T, _>(result.as_slice(), t)
+    }
 }
 
 /// The entry for serializing. `T` should have declared the `root` by `#[xmlserde(root=b"")]`
@@ -339,9 +380,20 @@ where
     T: XmlDeserialize,
     R: BufRead,
 {
+    let root = T::de_root().expect(r#"#[xmlserde(root = b"tag")]"#);
+    xml_deserialize_from_reader_with_root(reader, root)
+}
+
+pub(crate) fn xml_deserialize_from_reader_with_root<T, R>(
+    reader: R,
+    root: &[u8],
+) -> Result<T, String>
+where
+    T: XmlDeserialize,
+    R: BufRead,
+{
     let mut reader = quick_xml::Reader::from_reader(reader);
     let mut buf = Vec::<u8>::new();
-    let root = T::de_root().expect(r#"#[xmlserde(root = b"tag")]"#);
     loop {
         match reader.read_event_into(&mut buf) {
             Ok(Event::Start(start)) => {

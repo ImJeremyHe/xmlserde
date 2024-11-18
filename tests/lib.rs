@@ -771,4 +771,55 @@ mod tests {
         let r = xml_serialize(wrapper);
         assert_eq!(r, r#"<root header=""><Bar/></root>"#);
     }
+
+    #[test]
+    fn test_de_untagged_struct() {
+        #[derive(XmlDeserialize)]
+        #[xmlserde(root = b"foo")]
+        struct Foo {
+            #[xmlserde(ty = "untagged_struct")]
+            bar: Bar,
+        }
+
+        #[derive(XmlDeserialize)]
+        struct Bar {
+            #[xmlserde(name = b"a", ty = "child")]
+            a: A,
+            #[xmlserde(name = b"c", ty = "child")]
+            c: C,
+        }
+
+        #[derive(XmlDeserialize)]
+        struct A {
+            #[xmlserde(name = b"attr1", ty = "attr")]
+            attr1: u16,
+        }
+
+        #[derive(XmlDeserialize)]
+        struct C {
+            #[xmlserde(name = b"attr2", ty = "attr")]
+            attr2: u16,
+        }
+
+        let xml = r#"<foo><a attr1="12"/><c attr2="200"/></foo>"#;
+        let foo = xml_deserialize_from_str::<Foo>(&xml).unwrap();
+        assert_eq!(foo.bar.a.attr1, 12);
+        assert_eq!(foo.bar.c.attr2, 200);
+
+        #[derive(XmlDeserialize)]
+        #[xmlserde(root = b"foo")]
+        struct FooOption {
+            #[xmlserde(ty = "untagged_struct")]
+            bar: Option<Bar>,
+        }
+        let xml = r#"<foo><a attr1="12"/><c attr2="200"/></foo>"#;
+        let foo = xml_deserialize_from_str::<FooOption>(&xml).unwrap();
+        let bar = foo.bar.unwrap();
+        assert_eq!(bar.a.attr1, 12);
+        assert_eq!(bar.c.attr2, 200);
+
+        let xml = r#"<foo>></foo>"#;
+        let foo = xml_deserialize_from_str::<FooOption>(&xml).unwrap();
+        assert!(foo.bar.is_none());
+    }
 }
