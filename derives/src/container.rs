@@ -120,7 +120,8 @@ pub struct FieldsSummary<'a> {
     pub text: Option<StructField<'a>>,
     pub attrs: Vec<StructField<'a>>,
     pub self_closed_children: Vec<StructField<'a>>,
-    pub untags: Vec<StructField<'a>>,
+    pub untagged_enums: Vec<StructField<'a>>,
+    pub untagged_structs: Vec<StructField<'a>>,
 }
 
 impl<'a> FieldsSummary<'a> {
@@ -130,14 +131,17 @@ impl<'a> FieldsSummary<'a> {
             text: None,
             attrs: vec![],
             self_closed_children: vec![],
-            untags: vec![],
+            untagged_enums: vec![],
+            untagged_structs: vec![],
         };
         fields.into_iter().for_each(|f| match f.ty {
             EleType::Attr => result.attrs.push(f),
             EleType::Child => result.children.push(f),
             EleType::Text => result.text = Some(f),
             EleType::SelfClosedChild => result.self_closed_children.push(f),
-            EleType::Untag => result.untags.push(f),
+            EleType::Untag => result.untagged_enums.push(f),
+            EleType::UntaggedEnum => result.untagged_enums.push(f),
+            EleType::UntaggedStruct => result.untagged_structs.push(f),
         });
         result
     }
@@ -154,7 +158,17 @@ pub struct StructField<'a> {
 }
 
 impl<'a> StructField<'a> {
-    pub fn validate(&self) {}
+    pub fn validate(&self) {
+        let untagged = match self.ty {
+            EleType::Untag => true,
+            EleType::UntaggedEnum => true,
+            EleType::UntaggedStruct => true,
+            _ => false,
+        };
+        if untagged && self.name.is_some() {
+            panic!("untagged types doesn't need a name")
+        }
+    }
 
     pub fn from_ast(f: &'a syn::Field) -> Option<Self> {
         let mut name = Option::<syn::LitByteStr>::None;
@@ -182,7 +196,9 @@ impl<'a> StructField<'a> {
                             "child" => EleType::Child,
                             "text" => EleType::Text,
                             "sfc" => EleType::SelfClosedChild,
-                            "untag" => EleType::Untag,
+                            "untag" => EleType::Untag, // todo: generate a deprecate function to let users know
+                            "untagged_enum" => EleType::UntaggedEnum,
+                            "untagged_struct" => EleType::UntaggedStruct,
                             _ => panic!("invalid type"),
                         };
                         ty = Some(t);
@@ -318,7 +334,11 @@ pub enum EleType {
     /// </font>
     /// In this case, </b> indicates the field *bold* is true and <i/> indicates *italic* is true.
     SelfClosedChild,
+    /// Deprecated, use `UntaggedEnum`
     Untag,
+
+    UntaggedEnum,
+    UntaggedStruct,
 }
 
 pub enum Derive {
