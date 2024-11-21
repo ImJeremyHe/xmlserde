@@ -442,14 +442,14 @@ fn get_deserialize_from_unparsed(children: &[StructField]) -> proc_macro2::Token
                 quote! {
                     #name => {
                         #ident.push(content.deserialize_to::<#t>().unwrap());
-                    },
+                    }
                 }
             }
             Generic::Opt(t) => {
                 quote! {
                     #name => {
                         #ident = Some(content.deserialize_to::<#t>().unwrap());
-                    },
+                    }
                 }
             }
             Generic::None => {
