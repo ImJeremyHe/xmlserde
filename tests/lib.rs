@@ -822,4 +822,18 @@ mod tests {
         let foo = xml_deserialize_from_str::<FooOption>(&xml).unwrap();
         assert!(foo.bar.is_none());
     }
+
+    #[test]
+    fn test_issue_60() {
+        #[derive(Clone, Debug, Default, XmlDeserialize)]
+        pub struct Parameters {
+            #[xmlserde(name = b"parameter", ty = "child")]
+            _parameter: Vec<A>,
+            #[xmlserde(name = b"instance-parameter", ty = "child")]
+            _instance_parameter: Option<A>,
+        }
+
+        #[derive(Clone, Debug, Default, XmlDeserialize)]
+        pub struct A {}
+    }
 }

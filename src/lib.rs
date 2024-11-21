@@ -3,8 +3,8 @@
 //!
 //! Please add these dependencies in your `Cargo.toml`.
 //! ```toml
-//! xmlserde = "0.6"
-//! xmlserde_derives = "0.6"
+//! xmlserde = "0.10"
+//! xmlserde_derives = "0.10"
 //! ```
 //!
 //! # Deserialize
