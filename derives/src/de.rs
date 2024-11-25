@@ -140,14 +140,24 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
         untagged_enums,
         untagged_structs,
     } = summary;
-    let get_children_tags = if children.len() > 0 {
+    let get_children_tags = if children.len() > 0 || untagged_enums.len() > 0 {
         let names = children.iter().map(|f| {
             let n = f.name.as_ref().expect("should have name");
             quote! {#n}
         });
+        let untagged_enums = untagged_enums.iter().map(|f| {
+            let ty = match &f.generic {
+                Generic::Vec(t) => t,
+                Generic::Opt(t) => t,
+                Generic::None => &f.original.ty,
+            };
+            quote! {#ty::__get_children_tags()}
+        });
         quote! {
             fn __get_children_tags() -> Vec<&'static [u8]> {
-                vec![#(#names,)*]
+                let mut r: Vec<&'static [u8]> = vec![#(#names,)*];
+                #(r.extend(#untagged_enums.into_iter());)*
+                r
             }
         }
     } else {
@@ -179,11 +189,12 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     };
 
     // Only those structs with only children can be untagged
-    let deserialize_from_unparsed = if children.len() > 0 && attr_len == 0 && sfc_len == 0 {
-        get_deserialize_from_unparsed(&children)
-    } else {
-        quote! {}
-    };
+    let deserialize_from_unparsed =
+        if children.len() > 0 && attr_len == 0 && sfc_len == 0 && untagged_enums.len() == 0 {
+            get_deserialize_from_unparsed(&children)
+        } else {
+            quote! {}
+        };
     let encounter_unknown = if container.deny_unknown {
         quote! {
             let _field = std::str::from_utf8(_field).unwrap();
@@ -264,7 +275,7 @@ fn get_untagged_struct_fields_result(fileds: &[StructField]) -> proc_macro2::Tok
         match f.generic {
             Generic::Vec(_) => unreachable!(),
             Generic::Opt(_t) => quote! {
-                if #ident_opt_unparsed_array .len() > 0 {
+                if #ident_opt_unparsed_array.len() > 0 {
                     #ident = Some(#_t::__deserialize_from_unparsed_array(#ident_opt_unparsed_array));
                 }
             },

@@ -836,4 +836,20 @@ mod tests {
         #[derive(Clone, Debug, Default, XmlDeserialize)]
         pub struct A {}
     }
+
+    #[test]
+    fn test_vec_deserialize() {
+        #[derive(Debug, XmlDeserialize)]
+        pub struct CtTextParagraph {
+            #[xmlserde(name = b"pPr", ty = "child")]
+            pub _p_pr: Option<CtTextParagraphProperties>,
+            #[xmlserde(ty = "untagged_enum")]
+            pub _text_runs: Vec<A>,
+        }
+
+        #[derive(Debug, XmlDeserialize, XmlSerialize)]
+        pub struct A {}
+        #[derive(Debug, XmlDeserialize, XmlSerialize)]
+        pub struct CtTextParagraphProperties {}
+    }
 }

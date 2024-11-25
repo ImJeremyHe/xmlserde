@@ -244,7 +244,7 @@ impl<'a> StructField<'a> {
     }
 
     pub fn is_required(&self) -> bool {
-        if matches!(self.ty, EleType::Untag) {
+        if matches!(self.ty, EleType::Untag) || matches!(self.ty, EleType::UntaggedEnum) {
             return match self.generic {
                 Generic::Vec(_) => false,
                 Generic::Opt(_) => false,
