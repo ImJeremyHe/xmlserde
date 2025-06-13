@@ -1,9 +1,9 @@
 use syn::DeriveInput;
 
-use crate::container::{Container, Derive, EleType, FieldsSummary, Generic, StructField};
+use crate::container::{Container, EleType, FieldsSummary, Generic, StructField};
 
 pub fn get_ser_impl_block(input: DeriveInput) -> proc_macro2::TokenStream {
-    let container = Container::from_ast(&input, Derive::Serialize);
+    let container = Container::from_ast(&input);
     container.validate();
     if container.is_enum() {
         get_ser_enum_impl_block(container)

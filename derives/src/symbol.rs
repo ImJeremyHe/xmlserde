@@ -15,6 +15,10 @@ pub const SKIP_SERIALIZING: Symbol = Symbol("skip_serializing");
 pub const VEC_SIZE: Symbol = Symbol("vec_size");
 pub const DEFAULT: Symbol = Symbol("default");
 
+pub const RENAME: Symbol = Symbol("rename");
+pub const MAP: Symbol = Symbol("map");
+pub const OTHER: Symbol = Symbol("other");
+
 impl PartialEq<Symbol> for Ident {
     fn eq(&self, other: &Symbol) -> bool {
         self == other.0

@@ -1,6 +1,5 @@
 use crate::symbol::{
     DEFAULT, DENY_UNKNOWN, NAME, ROOT, SKIP_SERIALIZING, TYPE, VEC_SIZE, WITH_CUSTOM_NS, WITH_NS,
-    XML_SERDE,
 };
 use proc_macro2::{Group, Span, TokenStream, TokenTree};
 use syn::parse::{self, Parse};
@@ -9,6 +8,8 @@ use syn::token::Comma;
 use syn::Meta::Path;
 use syn::Meta::{self, NameValue};
 use syn::Variant;
+
+use crate::utils::{get_lit_byte_str, get_lit_str, get_xmlserde_meta_items};
 
 pub struct Container<'a> {
     pub struct_fields: Vec<StructField<'a>>, // Struct fields
@@ -36,7 +37,7 @@ impl<'a> Container<'a> {
         self.struct_fields.iter().for_each(|f| f.validate());
     }
 
-    pub fn from_ast(item: &'a syn::DeriveInput, _derive: Derive) -> Container<'a> {
+    pub fn from_ast(item: &'a syn::DeriveInput) -> Container<'a> {
         let mut with_ns = Option::<syn::LitByteStr>::None;
         let mut custom_ns = Vec::<(syn::LitByteStr, syn::LitByteStr)>::new();
         let mut root = Option::<syn::LitByteStr>::None;
@@ -339,40 +340,6 @@ pub enum EleType {
 
     UntaggedEnum,
     UntaggedStruct,
-}
-
-pub enum Derive {
-    Serialize,
-    Deserialize,
-}
-
-fn get_xmlserde_meta_items(attr: &syn::Attribute) -> Result<Vec<syn::Meta>, ()> {
-    if attr.path() != XML_SERDE {
-        return Ok(Vec::new());
-    }
-
-    match attr.parse_args_with(Punctuated::<Meta, Comma>::parse_terminated) {
-        Ok(meta) => Ok(meta.into_iter().collect()),
-        Err(_) => Err(()),
-    }
-}
-
-fn get_lit_byte_str<'a>(expr: &syn::Expr) -> Result<&syn::LitByteStr, ()> {
-    if let syn::Expr::Lit(lit) = expr {
-        if let syn::Lit::ByteStr(l) = &lit.lit {
-            return Ok(l);
-        }
-    }
-    Err(())
-}
-
-fn get_lit_str<'a>(lit: &syn::Expr) -> Result<&syn::LitStr, ()> {
-    if let syn::Expr::Lit(lit) = lit {
-        if let syn::Lit::Str(l) = &lit.lit {
-            return Ok(&l);
-        }
-    }
-    Err(())
 }
 
 pub fn parse_lit_into_expr_path(value: &syn::Expr) -> Result<syn::ExprPath, ()> {

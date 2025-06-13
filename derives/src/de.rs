@@ -3,7 +3,7 @@ use syn::DeriveInput;
 use crate::container::{self, Container, EleType, FieldsSummary, Generic, StructField};
 
 pub fn get_de_impl_block(input: DeriveInput) -> proc_macro2::TokenStream {
-    let container = Container::from_ast(&input, container::Derive::Deserialize);
+    let container = Container::from_ast(&input);
     container.validate();
     if container.is_enum() {
         get_de_enum_impl_block(container)

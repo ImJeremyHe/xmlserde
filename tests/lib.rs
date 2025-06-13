@@ -3,6 +3,7 @@ mod tests {
 
     use xmlserde::{xml_deserialize_from_str, xml_serialize, Unparsed, XmlValue};
     use xmlserde::{xml_serde_enum, XmlDeserialize, XmlSerialize};
+    use xmlserde_derives::XmlEnumValue;
     use xmlserde_derives::{XmlDeserialize, XmlSerialize};
 
     #[test]
@@ -851,5 +852,52 @@ mod tests {
         pub struct A {}
         #[derive(Debug, XmlDeserialize, XmlSerialize)]
         pub struct CtTextParagraphProperties {}
+    }
+
+    #[test]
+    fn test_xml_serde_enum_derives() {
+        #[derive(Debug, Clone, PartialEq, Eq, XmlEnumValue, Default)]
+        #[allow(unused_variables)]
+        pub enum Status {
+            #[xmlserde(rename = "cat")]
+            Cat,
+            #[xmlserde(rename = "dog")]
+            Dog,
+            #[default]
+            #[xmlserde(map = ["parrot", "pigeon"])]
+            Bird,
+            #[xmlserde(other)]
+            Other(String),
+        }
+
+        let cat = Status::Cat;
+        assert_eq!(cat.serialize(), "cat");
+        let dog = Status::Dog;
+        assert_eq!(dog.serialize(), "dog");
+        let bird = Status::Bird;
+        assert_eq!(bird.serialize(), "parrot");
+        let other = Status::Other("other1".to_string());
+        assert_eq!(other.serialize(), "other1");
+
+        let str1 = "cat";
+        let str2 = "dog";
+        let str3 = "parrot";
+        let str4 = "pigeon";
+        let str5 = "other1";
+        let str6 = "animal";
+        assert_eq!(Status::deserialize(str1).unwrap(), Status::Cat);
+        assert_eq!(Status::deserialize(str2).unwrap(), Status::Dog);
+        assert_eq!(Status::deserialize(str3).unwrap(), Status::Bird);
+        assert_eq!(Status::deserialize(str4).unwrap(), Status::Bird);
+        assert_eq!(
+            Status::deserialize(str5).unwrap(),
+            Status::Other("other1".to_string())
+        );
+        assert_eq!(
+            Status::deserialize(str6).unwrap(),
+            Status::Other("animal".to_string())
+        );
+
+        assert!(matches!(Status::default(), Status::Bird));
     }
 }
