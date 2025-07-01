@@ -10,7 +10,7 @@ keywords = ["xml", "serde"]
 readme = "README.md"
 
 [dependencies]
-quick-xml = { version = "0.37", features = ["serialize"] }
+quick-xml = { version = "0.38", features = ["serialize"] }
 
 [dev-dependencies]
 xmlserde_derives = { path = "./derives", version = "0.11.0" }
