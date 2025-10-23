@@ -22,14 +22,14 @@ fn get_ser_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
             let name = v.name.as_ref().expect("should have name");
             quote!{
                 Self::#f => {
-                    if tag == b"" {
+                    if _tag_ == b"" {
                         let _t = String::from_utf8_lossy(#name);
-                        let _ = writer.write_event(Event::Empty(BytesStart::new(_t)));
+                        let _ = _writer_.write_event(Event::Empty(BytesStart::new(_t)));
                     } else {
-                        let _ = writer.write_event(Event::Start(BytesStart::new(String::from_utf8_lossy(tag))));
+                        let _ = _writer_.write_event(Event::Start(BytesStart::new(String::from_utf8_lossy(_tag_))));
                         let _t = String::from_utf8_lossy(#name);
-                        let _ = writer.write_event(Event::Empty(BytesStart::new(_t)));
-                        let _ = writer.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(tag))));
+                        let _ = _writer_.write_event(Event::Empty(BytesStart::new(_t)));
+                        let _ = _writer_.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(_tag_))));
                     }
                 }
             }
@@ -37,19 +37,19 @@ fn get_ser_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
             if matches!(ele_ty, EleType::Text) {
                 quote!{
                     Self::#f(c) => {
-                        let _ = writer.write_event(Event::Text(BytesText::new(&c.serialize())));
+                        let _ = _writer_.write_event(Event::Text(BytesText::new(&c.serialize())));
                     }
                 }
             } else {
                 let name = v.name.as_ref().expect("should have hame");
                 quote! {
                     Self::#f(c) => {
-                        if tag == b"" {
-                            c.serialize(#name, writer);
+                        if _tag_ == b"" {
+                            c.serialize(#name, _writer_);
                         } else {
-                            let _ = writer.write_event(Event::Start(BytesStart::new(String::from_utf8_lossy(tag))));
-                            c.serialize(#name, writer);
-                            let _ = writer.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(tag))));
+                            let _ = _writer_.write_event(Event::Start(BytesStart::new(String::from_utf8_lossy(_tag_))));
+                            c.serialize(#name, _writer_);
+                            let _ = _writer_.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(_tag_))));
                         }
                     },
                 }
@@ -61,8 +61,8 @@ fn get_ser_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
         impl #impl_generics ::xmlserde::XmlSerialize for #ident #type_generics #where_clause {
             fn serialize<W: std::io::Write>(
                 &self,
-                tag: &[u8],
-                writer: &mut ::xmlserde::quick_xml::Writer<W>,
+                _tag_: &[u8],
+                _writer_: &mut ::xmlserde::quick_xml::Writer<W>,
             ) {
                 use ::xmlserde::quick_xml::events::*;
                 match self {
@@ -76,7 +76,7 @@ fn get_ser_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
 fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
     let write_ns = match container.with_ns {
         Some(ns) => quote! {
-            attrs.push(Attribute::from((b"xmlns".as_ref(), #ns.as_ref())));
+            _attrs_.push(Attribute::from((b"xmlns".as_ref(), #ns.as_ref())));
         },
         None => quote! {},
     };
@@ -87,7 +87,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
             quote! {
                 let mut __vec = b"xmlns:".to_vec();
                 __vec.extend(#ns.to_vec());
-                attrs.push(Attribute::from((__vec.as_ref(), #value.as_ref())));
+                _attrs_.push(Attribute::from((__vec.as_ref(), #value.as_ref())));
             }
         });
         quote! {#(#cns)*}
@@ -116,7 +116,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
                     match &self.#ident {
                         Some(v) => {
                             sr = v.serialize();
-                            attrs.push(Attribute::from((#name.as_ref(), sr.as_bytes())));
+                            _attrs_.push(Attribute::from((#name.as_ref(), sr.as_bytes())));
                         },
                         None => {},
                     }
@@ -127,12 +127,12 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
                     let mut ser;
                     if #path() != self.#ident {
                         ser = self.#ident.serialize();
-                        attrs.push(Attribute::from((#name.as_ref(), ser.as_bytes())));
+                        _attrs_.push(Attribute::from((#name.as_ref(), ser.as_bytes())));
                     }
                 },
                 None => quote! {
                     let ser = self.#ident.serialize();
-                    attrs.push(Attribute::from((#name.as_ref(), ser.as_bytes())));
+                    _attrs_.push(Attribute::from((#name.as_ref(), ser.as_bytes())));
                 },
             },
         }
@@ -146,7 +146,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
                     Some(__d) => {
                         let r = __d.serialize();
                         let event = BytesText::new(&r);
-                        writer.write_event(Event::Text(event));
+                        _writer_.write_event(Event::Text(event));
                     }
                 }
             }
@@ -154,7 +154,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
             quote! {
                 let r = self.#ident.serialize();
                 let event = BytesText::new(&r);
-                writer.write_event(Event::Text(event));
+                _writer_.write_event(Event::Text(event));
             }
         }
     } else {
@@ -164,7 +164,7 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
             quote! {
                 if self.#ident {
                     let event = BytesStart::new(String::from_utf8_lossy(#name));
-                    writer.write_event(Event::Empty(event));
+                    _writer_.write_event(Event::Empty(event));
                 }
             }
         });
@@ -175,14 +175,14 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
                 let ident = f.original.ident.as_ref().unwrap();
                 let name = f.name.as_ref().expect("should have name");
                 quote! {
-                    self.#ident.serialize(#name, writer);
+                    self.#ident.serialize(#name, _writer_);
                 }
             }
         });
         let write_untags = untags.into_iter().map(|f| {
             let ident = f.original.ident.as_ref().expect("should have name");
             quote! {
-                self.#ident.serialize(b"", writer);
+                self.#ident.serialize(b"", _writer_);
             }
         });
         quote! {
@@ -195,15 +195,15 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
     let (impl_generics, type_generics, where_clause) = container.original.generics.split_for_impl();
     let write_event = quote! {
         if is_empty {
-            writer.write_event(Event::Empty(start));
-        } else if is_untagged {
+            _writer_.write_event(Event::Empty(start));
+        } else if _is_untagged_ {
             // Not to write the start event
             #write_text_or_children
         } else {
-            writer.write_event(Event::Start(start));
+            _writer_.write_event(Event::Start(start));
             #write_text_or_children
-            let end = BytesEnd::new(String::from_utf8_lossy(tag));
-            writer.write_event(Event::End(end));
+            let end = BytesEnd::new(String::from_utf8_lossy(_tag_));
+            _writer_.write_event(Event::End(end));
         }
     };
     let get_root = if let Some(r) = &container.root {
@@ -220,19 +220,19 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
         impl #impl_generics ::xmlserde::XmlSerialize for #ident #type_generics #where_clause {
             fn serialize<W: std::io::Write>(
                 &self,
-                tag: &[u8],
-                writer: &mut ::xmlserde::quick_xml::Writer<W>,
+                _tag_: &[u8],
+                _writer_: &mut ::xmlserde::quick_xml::Writer<W>,
             ) {
                 use ::xmlserde::quick_xml::events::*;
                 use ::xmlserde::quick_xml::events::attributes::Attribute;
                 use ::xmlserde::XmlValue;
-                let start = BytesStart::new(String::from_utf8_lossy(tag));
-                let mut attrs = Vec::<Attribute>::new();
-                let is_untagged = tag.len() == 0;
+                let start = BytesStart::new(String::from_utf8_lossy(_tag_));
+                let mut _attrs_ = Vec::<Attribute>::new();
+                let _is_untagged_ = _tag_.len() == 0;
                 #write_ns
                 #write_custom_ns
                 #(#build_attr_and_push)*
-                let start = start.with_attributes(attrs);
+                let start = start.with_attributes(_attrs_);
                 #init
                 #write_event
             }
