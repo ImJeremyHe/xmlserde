@@ -25,7 +25,7 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
                 if let Some(ty) = ty {
                     quote! {
                         #name => {
-                            let _r = #ty::deserialize(#name, reader, $attrs, $b);
+                            let _r = #ty::deserialize(#name, _reader_, $attrs, $b);
                             return Self::#ident(_r);
                         }
                     }
@@ -76,26 +76,26 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
             let name = v.name.as_ref().expect("should have `name` for `child`");
             quote! {#name}
         });
-    let exact_tags = children_branches!(attrs, is_empty);
+    let exact_tags = children_branches!(_attrs_, _is_empty_);
     quote! {
         #[allow(unused_assignments)]
         impl #impl_generics ::xmlserde::XmlDeserialize for #ident #type_generics #where_clause {
             fn deserialize<B: std::io::BufRead>(
-                tag: &[u8],
-                reader: &mut ::xmlserde::quick_xml::Reader<B>,
-                attrs: ::xmlserde::quick_xml::events::attributes::Attributes,
-                is_empty: bool,
+                _tag_: &[u8],
+                _reader_: &mut ::xmlserde::quick_xml::Reader<B>,
+                _attrs_: ::xmlserde::quick_xml::events::attributes::Attributes,
+                _is_empty_: bool,
             ) -> Self {
                 use ::xmlserde::quick_xml::events::*;
-                match tag {
+                match _tag_ {
                     #(#exact_tags)*
                     _ => {},
                 }
                 let mut buf = Vec::<u8>::new();
                 let mut result = Option::<Self>::None;
                 loop {
-                    match reader.read_event_into(&mut buf) {
-                        Ok(Event::End(e)) if e.name().into_inner() == tag => {
+                    match _reader_.read_event_into(&mut buf) {
+                        Ok(Event::End(e)) if e.name().into_inner() == _tag_ => {
                             break
                         },
                         Ok(Event::Start(_s)) => match _s.name().into_inner() {
@@ -217,13 +217,13 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
         #[allow(unused_assignments)]
         impl #impl_generics ::xmlserde::XmlDeserialize for #ident #type_generics #where_clause {
             fn deserialize<B: std::io::BufRead>(
-                tag: &[u8],
-                reader: &mut ::xmlserde::quick_xml::Reader<B>,
-                attrs: ::xmlserde::quick_xml::events::attributes::Attributes,
-                is_empty: bool,
+                _tag_: &[u8],
+                _reader_: &mut ::xmlserde::quick_xml::Reader<B>,
+                _attrs_: ::xmlserde::quick_xml::events::attributes::Attributes,
+                _is_empty_: bool,
             ) -> Self {
                 #fields_init
-                attrs.into_iter().for_each(|attr| {
+                _attrs_.into_iter().for_each(|attr| {
                     if let Ok(attr) = attr {
                         match attr.key.into_inner() {
                             #(#attr_branches)*
@@ -237,17 +237,19 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                 let mut buf = Vec::<u8>::new();
                 use ::xmlserde::quick_xml::events::Event;
                 #vec_init
-                if is_empty {} else {
+                if _is_empty_ {} else {
                     loop {
-                        match reader.read_event_into(&mut buf) {
-                            Ok(Event::End(e)) if e.name().into_inner() == tag => {
+                        match _reader_.read_event_into(&mut buf) {
+                            Ok(Event::End(e)) if e.name().into_inner() == _tag_ => {
                                 break
                             },
                             #sfc_branch
                             #child_branches
                             #text_branch
                             #encounter_unknown_branch
-                            Ok(Event::Eof) => break,
+                            Ok(Event::Eof) => {
+                                break;
+                            },
                             Err(_) => break,
                             _ => {},
                         }
@@ -693,17 +695,17 @@ fn untag_enums_match_branch(fields: &[StructField]) -> proc_macro2::TokenStream 
         let branch = match f.generic {
             Generic::Vec(ty) => quote! {
                 _ty if #ty::__get_children_tags().contains(&_ty) => {
-                    #ident.push(#ty::deserialize(_ty, reader, s.attributes(), is_empty));
+                    #ident.push(#ty::deserialize(_ty, _reader_, s.attributes(), _is_empty_));
                 }
             },
             Generic::Opt(ty) => quote! {
                 _ty if #ty::__get_children_tags().contains(&_ty) => {
-                    #ident = Some(#ty::deserialize(_ty, reader, s.attributes(), is_empty));
+                    #ident = Some(#ty::deserialize(_ty, _reader_, s.attributes(), _is_empty_));
                 }
             },
             Generic::None => quote! {
                 _t if #ty::__get_children_tags().contains(&_t) => {
-                    #ident = Some(#ty::deserialize(_t, reader, s.attributes(), is_empty));
+                    #ident = Some(#ty::deserialize(_t, _reader_, s.attributes(), _is_empty_));
                 }
             },
         };
@@ -730,7 +732,7 @@ fn untag_structs_match_branch(fields: &[StructField]) -> proc_macro2::TokenStrea
             Generic::Vec(_) => unreachable!(),
             Generic::Opt(t) => quote! {
                 _t if #t::__get_children_tags().contains(&_t) => {
-                    let _r = ::xmlserde::Unparsed::deserialize(_t, reader, s.attributes(), is_empty);
+                    let _r = ::xmlserde::Unparsed::deserialize(_t, _reader_, s.attributes(), _is_empty_);
                     let _tags = #t::__get_children_tags();
                     let idx = _tags.binary_search(&_t).unwrap();
                     #ident_opt_unparsed_array.push((_tags[idx], _r));
@@ -738,7 +740,7 @@ fn untag_structs_match_branch(fields: &[StructField]) -> proc_macro2::TokenStrea
             },
             Generic::None => quote! {
                 _t if #ty::__get_children_tags().contains(&_t) => {
-                    let _r = ::xmlserde::Unparsed::deserialize(_t, reader, s.attributes(), is_empty);
+                    let _r = ::xmlserde::Unparsed::deserialize(_t, _reader_, s.attributes(), _is_empty_);
                     let _tags = #ty::__get_children_tags();
                     let idx = _tags.binary_search(&_t).unwrap();
                     #ident_unparsed_array.push((_tags[idx], _r));
@@ -772,7 +774,7 @@ fn children_match_branch(
             Generic::Vec(vec_ty) => {
                 quote! {
                     #tag => {
-                        let __ele = #vec_ty::deserialize(#tag, reader, s.attributes(), is_empty);
+                        let __ele = #vec_ty::deserialize(#tag, _reader_, s.attributes(), _is_empty_);
                         #ident.push(__ele);
                     }
                 }
@@ -780,7 +782,7 @@ fn children_match_branch(
             Generic::Opt(opt_ty) => {
                 quote! {
                     #tag => {
-                        let __f = #opt_ty::deserialize(#tag, reader, s.attributes(), is_empty);
+                        let __f = #opt_ty::deserialize(#tag, _reader_, s.attributes(), _is_empty_);
                         #ident = Some(__f);
                     },
                 }
@@ -797,7 +799,7 @@ fn children_match_branch(
                 };
                 quote! {
                     #tag => {
-                        let __f = #t::deserialize(#tag, reader, s.attributes(), is_empty);
+                        let __f = #t::deserialize(#tag, _reader_, s.attributes(), _is_empty_);
                         #tt
                     },
                 }
@@ -811,7 +813,7 @@ fn children_match_branch(
 
     quote! {
         Ok(Event::Empty(s)) => {
-            let is_empty = true;
+            let _is_empty_ = true;
             match s.name().into_inner() {
                 #(#branches)*
                 #untagged_enums_branches
@@ -820,7 +822,7 @@ fn children_match_branch(
             }
         }
         Ok(Event::Start(s)) => {
-            let is_empty = false;
+            let _is_empty_ = false;
             match s.name().into_inner() {
                 #(#branches)*
                 #untagged_enums_branches

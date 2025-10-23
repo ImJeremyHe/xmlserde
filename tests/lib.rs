@@ -23,14 +23,14 @@ mod tests {
 
     #[test]
     fn default_for_child() {
-        #[derive(XmlDeserialize, Default)]
+        #[derive(Debug, XmlDeserialize, Default)]
         #[xmlserde(root = b"property")]
         struct Property {
             #[xmlserde(name = b"name", ty = "attr")]
             name: String,
         }
 
-        #[derive(XmlDeserialize, Default)]
+        #[derive(Debug, XmlDeserialize, Default)]
         #[xmlserde(root = b"properties")]
         struct InnerProperties {
             #[xmlserde(name = b"property", ty = "child")]
@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn derive_deserialize_vec_with_init_size_from_attr() {
-        #[derive(XmlDeserialize, Default)]
+        #[derive(Debug, XmlDeserialize, Default)]
         pub struct Child {
             #[xmlserde(name = b"age", ty = "attr")]
             pub age: u16,
@@ -112,7 +112,7 @@ mod tests {
         fn default_zero() -> u32 {
             0
         }
-        #[derive(XmlDeserialize, Default)]
+        #[derive(Debug, XmlDeserialize, Default)]
         #[xmlserde(root = b"root")]
         pub struct Aa {
             #[xmlserde(name = b"f", ty = "child", vec_size = "cnt")]
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn derive_deserialize_vec_with_init_size() {
-        #[derive(XmlDeserialize, Default)]
+        #[derive(Debug, XmlDeserialize, Default)]
         pub struct Child {
             #[xmlserde(name = b"age", ty = "attr")]
             pub _age: u16,
@@ -153,7 +153,7 @@ mod tests {
         fn default_zero() -> u32 {
             0
         }
-        #[derive(XmlDeserialize, Default)]
+        #[derive(Debug, XmlDeserialize, Default)]
         #[xmlserde(root = b"root")]
         pub struct Aa {
             #[xmlserde(name = b"f", ty = "child", vec_size = 10)]

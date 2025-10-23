@@ -176,9 +176,9 @@ impl<T: XmlSerialize> XmlSerialize for Option<T> {
 }
 
 impl<T: XmlSerialize> XmlSerialize for Vec<T> {
-    fn serialize<W: Write>(&self, tag: &[u8], writer: &mut quick_xml::Writer<W>) {
+    fn serialize<W: Write>(&self, _tag_: &[u8], _writer_: &mut quick_xml::Writer<W>) {
         self.iter().for_each(|c| {
-            let _ = c.serialize(tag, writer);
+            let _ = c.serialize(_tag_, _writer_);
         });
     }
 }
@@ -252,38 +252,38 @@ pub struct Unparsed {
 }
 
 impl XmlSerialize for Unparsed {
-    fn serialize<W: Write>(&self, tag: &[u8], writer: &mut quick_xml::Writer<W>) {
+    fn serialize<W: Write>(&self, _tag_: &[u8], _writer_: &mut quick_xml::Writer<W>) {
         use quick_xml::events::*;
-        let mut start = BytesStart::new(String::from_utf8_lossy(tag));
+        let mut start = BytesStart::new(String::from_utf8_lossy(_tag_));
         self.attrs.iter().for_each(|(k, v)| {
             let k = k as &str;
             let v = v as &str;
             start.push_attribute((k, v));
         });
         if self.data.len() > 0 {
-            let _ = writer.write_event(Event::Start(start));
+            let _ = _writer_.write_event(Event::Start(start));
             self.data.iter().for_each(|e| {
-                let _ = writer.write_event(e.clone());
+                let _ = _writer_.write_event(e.clone());
             });
-            let _ = writer.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(tag))));
+            let _ = _writer_.write_event(Event::End(BytesEnd::new(String::from_utf8_lossy(_tag_))));
         } else {
-            let _ = writer.write_event(Event::Empty(start));
+            let _ = _writer_.write_event(Event::Empty(start));
         }
     }
 }
 
 impl XmlDeserialize for Unparsed {
     fn deserialize<B: BufRead>(
-        tag: &[u8],
-        reader: &mut quick_xml::Reader<B>,
-        attrs: quick_xml::events::attributes::Attributes,
-        is_empty: bool,
+        _tag_: &[u8],
+        _reader_: &mut quick_xml::Reader<B>,
+        _attrs_: quick_xml::events::attributes::Attributes,
+        _is_empty_: bool,
     ) -> Self {
         use quick_xml::events::*;
         let mut attrs_vec = Vec::<(String, String)>::new();
         let mut data = Vec::<Event<'static>>::new();
         let mut buf = Vec::<u8>::new();
-        attrs.into_iter().for_each(|a| {
+        _attrs_.into_iter().for_each(|a| {
             if let Ok(attr) = a {
                 let key =
                     String::from_utf8(attr.key.into_inner().to_vec()).unwrap_or(String::from(""));
@@ -291,15 +291,15 @@ impl XmlDeserialize for Unparsed {
                 attrs_vec.push((key, value))
             }
         });
-        if is_empty {
+        if _is_empty_ {
             return Unparsed {
                 data,
                 attrs: attrs_vec,
             };
         }
         loop {
-            match reader.read_event_into(&mut buf) {
-                Ok(Event::End(e)) if e.name().into_inner() == tag => break,
+            match _reader_.read_event_into(&mut buf) {
+                Ok(Event::End(e)) if e.name().into_inner() == _tag_ => break,
                 Ok(Event::Eof) => break,
                 Err(_) => break,
                 Ok(e) => data.push(e.into_owned()),
