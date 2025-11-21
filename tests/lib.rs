@@ -900,4 +900,62 @@ mod tests {
 
         assert!(matches!(Status::default(), Status::Bird));
     }
+
+    pub fn default_one_u32() -> u32 {
+        1
+    }
+
+    #[test]
+    fn test_ooxml_1() {
+        let xml = r#"<tableStyleElement type="wholeTable" dxfId="6" />"#;
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"tableStyleElement")]
+        pub struct CtTableStyleElement {
+            #[xmlserde(name = b"type", ty = "attr")]
+            pub ty: StTableStyleType,
+            #[xmlserde(name = b"size", ty = "attr", default = "default_one_u32")]
+            pub size: u32,
+            #[xmlserde(name = b"dxfId", ty = "attr")]
+            pub dxf_id: Option<u32>,
+        }
+
+        xml_serde_enum! {
+            /// 18.18.77
+            #[derive(Debug, PartialEq, Eq)]
+            StTableStyleType {
+               WholeTable => "wholeTable",
+               HeaderRow => "headerRow",
+               TotalRow => "totalRow",
+               FirstColumn => "firstColumn",
+               LastColumn => "lastColumn",
+               FirstRowStripe => "firstRowStripe",
+               SecondRowStripe => "secondRowStripe",
+               FirstColumnStripe => "firstColumnStripe",
+               SecondColumnStripe => "secondColumnStripe",
+               FirstHeaderCell => "firstHeaderCell",
+               LastHeaderCell => "lastHeaderCell",
+               FirstTotalCell => "firstTotalCell",
+               LastTotalCell => "lastTotalCell",
+               FirstSubtotalColumn => "firstSubtotalColumn",
+               SecondSubtotalColumn => "secondSubtotalColumn",
+               ThirdSubtotalColumn => "thirdSubtotalColumn",
+               FirstSubtotalRow => "firstSubtotalRow",
+               SecondSubtotalRow => "secondSubtotalRow",
+               ThirdSubtotalRow => "thirdSubtotalRow",
+               BlankRow => "blankRow",
+               FirstColumnSubheading => "firstColumnSubheading",
+               SecondColumnSubheading => "secondColumnSubheading",
+               ThirdColumnSubheading => "thirdColumnSubheading",
+               FirstRowSubheading => "firstRowSubheading",
+               SecondRowSubheading => "secondRowSubheading",
+               ThirdRowSubheading => "thirdRowSubheading",
+               PageFieldLabels => "pageFieldLabels",
+               PageFieldVal => "pageFieldVal",
+            }
+        }
+        let foo = xml_deserialize_from_str::<CtTableStyleElement>(&xml).unwrap();
+        assert_eq!(foo.ty, StTableStyleType::WholeTable);
+        assert_eq!(foo.size, 1);
+        assert_eq!(foo.dxf_id, Some(6));
+    }
 }
