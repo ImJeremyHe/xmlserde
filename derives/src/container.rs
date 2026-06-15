@@ -375,7 +375,7 @@ fn respan_token(mut token: TokenTree, span: Span) -> TokenTree {
     token
 }
 
-fn get_generics(t: &syn::Type) -> Generic {
+fn get_generics(t: &syn::Type) -> Generic<'_> {
     match t {
         syn::Type::Path(p) => {
             let path = &p.path;

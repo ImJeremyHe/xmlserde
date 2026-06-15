@@ -168,9 +168,8 @@ pub trait XmlSerialize {
 
 impl<T: XmlSerialize> XmlSerialize for Option<T> {
     fn serialize<W: Write>(&self, tag: &[u8], writer: &mut quick_xml::Writer<W>) {
-        match self {
-            Some(t) => t.serialize(tag, writer),
-            None => {}
+        if let Some(t) = self {
+            t.serialize(tag, writer)
         }
     }
 }
@@ -178,7 +177,7 @@ impl<T: XmlSerialize> XmlSerialize for Option<T> {
 impl<T: XmlSerialize> XmlSerialize for Vec<T> {
     fn serialize<W: Write>(&self, _tag_: &[u8], _writer_: &mut quick_xml::Writer<W>) {
         self.iter().for_each(|c| {
-            let _ = c.serialize(_tag_, _writer_);
+            c.serialize(_tag_, _writer_);
         });
     }
 }
@@ -260,7 +259,7 @@ impl XmlSerialize for Unparsed {
             let v = v as &str;
             start.push_attribute((k, v));
         });
-        if self.data.len() > 0 {
+        if !self.data.is_empty() {
             let _ = _writer_.write_event(Event::Start(start));
             self.data.iter().for_each(|e| {
                 let _ = _writer_.write_event(e.clone());
@@ -399,17 +398,13 @@ where
     let mut buf = Vec::<u8>::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(start)) => {
-                if start.name().into_inner() == root {
-                    let result = T::deserialize(root, &mut reader, start.attributes(), false);
-                    return Ok(result);
-                }
+            Ok(Event::Start(start)) if start.name().into_inner() == root => {
+                let result = T::deserialize(root, &mut reader, start.attributes(), false);
+                return Ok(result);
             }
-            Ok(Event::Empty(start)) => {
-                if start.name().into_inner() == root {
-                    let result = T::deserialize(root, &mut reader, start.attributes(), true);
-                    return Ok(result);
-                }
+            Ok(Event::Empty(start)) if start.name().into_inner() == root => {
+                let result = T::deserialize(root, &mut reader, start.attributes(), true);
+                return Ok(result);
             }
             Ok(Event::Eof) => {
                 return Err(format!(
