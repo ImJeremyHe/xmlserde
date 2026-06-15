@@ -901,6 +901,38 @@ mod tests {
         assert!(matches!(Status::default(), Status::Bird));
     }
 
+    #[test]
+    fn test_unescape_xml_entities_in_attr() {
+        #[derive(Debug, XmlDeserialize)]
+        #[xmlserde(root = b"constant")]
+        struct Constant {
+            #[xmlserde(name = b"value", ty = "attr")]
+            value: String,
+        }
+
+        let xml = r#"<constant value="_-|&gt; &lt;."/>"#;
+        let c = xml_deserialize_from_str::<Constant>(xml).unwrap();
+        assert_eq!(c.value, "_-|> <.");
+
+        let xml = r#"<constant value="&amp;foo&apos;bar&quot;baz"/>"#;
+        let c = xml_deserialize_from_str::<Constant>(xml).unwrap();
+        assert_eq!(c.value, "&foo'bar\"baz");
+    }
+
+    #[test]
+    fn test_unescape_xml_entities_in_opt_attr() {
+        #[derive(Debug, XmlDeserialize)]
+        #[xmlserde(root = b"constant")]
+        struct Constant {
+            #[xmlserde(name = b"value", ty = "attr")]
+            value: Option<String>,
+        }
+
+        let xml = r#"<constant value="a &gt; b"/>"#;
+        let c = xml_deserialize_from_str::<Constant>(xml).unwrap();
+        assert_eq!(c.value.as_deref(), Some("a > b"));
+    }
+
     pub fn default_one_u32() -> u32 {
         1
     }

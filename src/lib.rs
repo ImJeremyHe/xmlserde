@@ -287,7 +287,10 @@ impl XmlDeserialize for Unparsed {
             if let Ok(attr) = a {
                 let key =
                     String::from_utf8(attr.key.into_inner().to_vec()).unwrap_or(String::from(""));
-                let value = String::from_utf8(attr.value.to_vec()).unwrap_or(String::from(""));
+                let value = attr
+                    .unescape_value()
+                    .map(|v| v.into_owned())
+                    .unwrap_or(String::from(""));
                 attrs_vec.push((key, value))
             }
         });

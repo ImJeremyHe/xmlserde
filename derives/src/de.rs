@@ -581,7 +581,7 @@ fn attr_match_branch(field: StructField) -> proc_macro2::TokenStream {
         quote! {
             #tag => {
                 use xmlserde::{XmlValue, XmlDeserialize};
-                let s = String::from_utf8(attr.value.into_iter().map(|c| *c).collect()).unwrap();
+                let s = attr.unescape_value().expect("unescape attr value").into_owned();
                 match #opt_ty::deserialize(&s) {
                     Ok(__v) => {
                         #ident = Some(__v);
@@ -603,7 +603,7 @@ fn attr_match_branch(field: StructField) -> proc_macro2::TokenStream {
         quote! {
             #tag => {
                 use xmlserde::{XmlValue, XmlDeserialize};
-                let __s = String::from_utf8(attr.value.into_iter().map(|c| *c).collect()).unwrap();
+                let __s = attr.unescape_value().expect("unescape attr value").into_owned();
                 match #t::deserialize(&__s) {
                     Ok(__v) => {
                         #tt
