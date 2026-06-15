@@ -92,8 +92,8 @@ mod tests {
         let result = xml_deserialize_from_str::<Font>(xml);
         match result {
             Ok(f) => {
-                assert_eq!(f.bold, true);
-                assert_eq!(f.italic, true);
+                assert!(f.bold);
+                assert!(f.italic);
                 assert_eq!(f.size, 12.2);
             }
             Err(_) => panic!(),
@@ -429,7 +429,7 @@ mod tests {
         }
 
         let xml = r#"<TestA><others age="16" name="Tom"><gf/><parent><f/><m name="Lisa">1999</m></parent></others></TestA>"#;
-        let p = xml_deserialize_from_str::<TestA>(&xml).unwrap();
+        let p = xml_deserialize_from_str::<TestA>(xml).unwrap();
         let ser = xml_serialize(p);
         assert_eq!(xml, ser);
     }
@@ -462,7 +462,7 @@ mod tests {
         }
 
         let xml = r#"<Root><a aAttr="3"/></Root>"#;
-        let p = xml_deserialize_from_str::<Root>(&xml).unwrap();
+        let p = xml_deserialize_from_str::<Root>(xml).unwrap();
         match p.dummy {
             EnumA::A1(ref a) => assert_eq!(a.a_attr1, 3),
             EnumA::B1(_) => panic!(),
@@ -499,7 +499,7 @@ mod tests {
         }
 
         let xml = r#"<Root><a aAttr="3"/><b bAttr="5"/><a aAttr="4"/></Root>"#;
-        let p = xml_deserialize_from_str::<Root>(&xml).unwrap();
+        let p = xml_deserialize_from_str::<Root>(xml).unwrap();
         assert_eq!(p.dummy.len(), 3);
         let ser = xml_serialize(p);
         assert_eq!(xml, &ser);
@@ -523,17 +523,11 @@ mod tests {
             #[xmlserde(name = b"aAttr", ty = "attr")]
             pub a_attr1: u32,
         }
-        #[derive(Debug, XmlSerialize, XmlDeserialize)]
-        pub struct Bstruct {
-            #[xmlserde(name = b"bAttr", ty = "attr")]
-            pub b_attr1: u32,
-        }
-
         let xml = r#"<Root/>"#;
-        let p = xml_deserialize_from_str::<Root>(&xml).unwrap();
-        assert!(matches!(p.dummy, None));
+        let p = xml_deserialize_from_str::<Root>(xml).unwrap();
+        assert!(p.dummy.is_none());
         let xml = r#"<Root><a aAttr="3"/></Root>"#;
-        let p = xml_deserialize_from_str::<Root>(&xml).unwrap();
+        let p = xml_deserialize_from_str::<Root>(xml).unwrap();
         match p.dummy {
             Some(EnumA::A1(ref a)) => assert_eq!(a.a_attr1, 3),
             None => panic!(),
@@ -559,6 +553,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(dead_code)]
     fn test_generics() {
         #[derive(Debug, XmlSerialize, XmlDeserialize)]
         #[xmlserde(root = b"Root")]
@@ -570,7 +565,6 @@ mod tests {
         #[derive(XmlSerialize)]
         pub enum EnumB<T: XmlSerialize> {
             #[xmlserde(name = b"a")]
-            #[allow(dead_code)]
             A1(T),
         }
 
@@ -608,14 +602,14 @@ mod tests {
         }
 
         let xml = r#"<parameter><varargs /></parameter>"#;
-        let p = xml_deserialize_from_str::<Parameter>(&xml).unwrap();
+        let p = xml_deserialize_from_str::<Parameter>(xml).unwrap();
         assert!(matches!(p.ty, ParameterType::VarArgs));
 
         let expect = xml_serialize(p);
         assert_eq!(expect, "<parameter><varargs/></parameter>");
 
         let xml = r#"<parameter><type name="n"/></parameter>"#;
-        let p = xml_deserialize_from_str::<Parameter>(&xml).unwrap();
+        let p = xml_deserialize_from_str::<Parameter>(xml).unwrap();
         if let ParameterType::Type(t) = &p.ty {
             assert_eq!(t.name, "n")
         } else {
@@ -625,7 +619,7 @@ mod tests {
         assert_eq!(expect, xml);
 
         let xml = r#"<parameter>ttttt</parameter>"#;
-        let p = xml_deserialize_from_str::<Parameter>(&xml).unwrap();
+        let p = xml_deserialize_from_str::<Parameter>(xml).unwrap();
         assert!(matches!(p.ty, ParameterType::Text(_)));
         let expect = xml_serialize(p);
         assert_eq!(expect, xml);
@@ -658,10 +652,10 @@ mod tests {
             <text:span> text1 </text:span>
             <text:span>text2</text:span>
         </text:p>"#;
-        let text_p = xml_deserialize_from_str::<TextP>(&xml).unwrap();
+        let text_p = xml_deserialize_from_str::<TextP>(xml).unwrap();
         let content = &text_p.text_p_content;
         assert_eq!(content.len(), 2);
-        if let TextPContent::TextSpan(span) = content.get(0).unwrap() {
+        if let TextPContent::TextSpan(span) = content.first().unwrap() {
             assert_eq!(&span.t, " text1 ")
         } else {
             panic!("")
@@ -679,10 +673,10 @@ mod tests {
         );
 
         let xml = r#"<text:p>abcdefg</text:p>"#;
-        let text_p = xml_deserialize_from_str::<TextP>(&xml).unwrap();
+        let text_p = xml_deserialize_from_str::<TextP>(xml).unwrap();
         let content = &text_p.text_p_content;
         assert_eq!(content.len(), 1);
-        if let TextPContent::Text(s) = content.get(0).unwrap() {
+        if let TextPContent::Text(s) = content.first().unwrap() {
             assert_eq!(s, "abcdefg")
         } else {
             panic!("")
@@ -702,7 +696,7 @@ mod tests {
             pub name: String,
         }
         let xml = r#"<pet name="Chaplin" age="1"/>"#;
-        let _ = xml_deserialize_from_str::<Pet>(&xml).unwrap();
+        let _ = xml_deserialize_from_str::<Pet>(xml).unwrap();
     }
 
     #[test]
@@ -714,7 +708,7 @@ mod tests {
             pub name: String,
         }
         let xml = r#"<pet name="Chaplin" age="1"/>"#;
-        let _ = xml_deserialize_from_str::<Pet>(&xml).unwrap();
+        let _ = xml_deserialize_from_str::<Pet>(xml).unwrap();
     }
 
     #[test]
@@ -728,7 +722,7 @@ mod tests {
             pub name: String,
         }
         let xml = r#"<pet name="Chaplin"><weight/></pet>"#;
-        let _ = xml_deserialize_from_str::<Pet>(&xml).unwrap();
+        let _ = xml_deserialize_from_str::<Pet>(xml).unwrap();
     }
 
     #[test]
@@ -740,7 +734,7 @@ mod tests {
             pub name: String,
         }
         let xml = r#"<pet name="Chaplin"><weight/></pet>"#;
-        let _ = xml_deserialize_from_str::<Pet>(&xml).unwrap();
+        let _ = xml_deserialize_from_str::<Pet>(xml).unwrap();
     }
 
     // https://github.com/ImJeremyHe/xmlserde/issues/52
@@ -803,7 +797,7 @@ mod tests {
         }
 
         let xml = r#"<foo><a attr1="12"/><c attr2="200"/></foo>"#;
-        let foo = xml_deserialize_from_str::<Foo>(&xml).unwrap();
+        let foo = xml_deserialize_from_str::<Foo>(xml).unwrap();
         assert_eq!(foo.bar.a.attr1, 12);
         assert_eq!(foo.bar.c.attr2, 200);
 
@@ -814,17 +808,18 @@ mod tests {
             bar: Option<Bar>,
         }
         let xml = r#"<foo><a attr1="12"/><c attr2="200"/></foo>"#;
-        let foo = xml_deserialize_from_str::<FooOption>(&xml).unwrap();
+        let foo = xml_deserialize_from_str::<FooOption>(xml).unwrap();
         let bar = foo.bar.unwrap();
         assert_eq!(bar.a.attr1, 12);
         assert_eq!(bar.c.attr2, 200);
 
         let xml = r#"<foo>></foo>"#;
-        let foo = xml_deserialize_from_str::<FooOption>(&xml).unwrap();
+        let foo = xml_deserialize_from_str::<FooOption>(xml).unwrap();
         assert!(foo.bar.is_none());
     }
 
     #[test]
+    #[allow(dead_code)]
     fn test_issue_60() {
         #[derive(Clone, Debug, Default, XmlDeserialize)]
         pub struct Parameters {
@@ -839,6 +834,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(dead_code)]
     fn test_vec_deserialize() {
         #[derive(Debug, XmlDeserialize)]
         pub struct CtTextParagraph {
@@ -901,6 +897,38 @@ mod tests {
         assert!(matches!(Status::default(), Status::Bird));
     }
 
+    #[test]
+    fn test_unescape_xml_entities_in_attr() {
+        #[derive(Debug, XmlDeserialize)]
+        #[xmlserde(root = b"constant")]
+        struct Constant {
+            #[xmlserde(name = b"value", ty = "attr")]
+            value: String,
+        }
+
+        let xml = r#"<constant value="_-|&gt; &lt;."/>"#;
+        let c = xml_deserialize_from_str::<Constant>(xml).unwrap();
+        assert_eq!(c.value, "_-|> <.");
+
+        let xml = r#"<constant value="&amp;foo&apos;bar&quot;baz"/>"#;
+        let c = xml_deserialize_from_str::<Constant>(xml).unwrap();
+        assert_eq!(c.value, "&foo'bar\"baz");
+    }
+
+    #[test]
+    fn test_unescape_xml_entities_in_opt_attr() {
+        #[derive(Debug, XmlDeserialize)]
+        #[xmlserde(root = b"constant")]
+        struct Constant {
+            #[xmlserde(name = b"value", ty = "attr")]
+            value: Option<String>,
+        }
+
+        let xml = r#"<constant value="a &gt; b"/>"#;
+        let c = xml_deserialize_from_str::<Constant>(xml).unwrap();
+        assert_eq!(c.value.as_deref(), Some("a > b"));
+    }
+
     pub fn default_one_u32() -> u32 {
         1
     }
@@ -953,7 +981,7 @@ mod tests {
                PageFieldVal => "pageFieldVal",
             }
         }
-        let foo = xml_deserialize_from_str::<CtTableStyleElement>(&xml).unwrap();
+        let foo = xml_deserialize_from_str::<CtTableStyleElement>(xml).unwrap();
         assert_eq!(foo.ty, StTableStyleType::WholeTable);
         assert_eq!(foo.size, 1);
         assert_eq!(foo.dxf_id, Some(6));
