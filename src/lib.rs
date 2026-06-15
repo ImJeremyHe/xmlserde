@@ -288,7 +288,7 @@ impl XmlDeserialize for Unparsed {
                 let key =
                     String::from_utf8(attr.key.into_inner().to_vec()).unwrap_or(String::from(""));
                 let value = attr
-                    .unescape_value()
+                    .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                     .map(|v| v.into_owned())
                     .unwrap_or(String::from(""));
                 attrs_vec.push((key, value))

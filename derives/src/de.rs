@@ -581,7 +581,7 @@ fn attr_match_branch(field: StructField) -> proc_macro2::TokenStream {
         quote! {
             #tag => {
                 use xmlserde::{XmlValue, XmlDeserialize};
-                let s = attr.unescape_value().expect("unescape attr value").into_owned();
+                let s = attr.normalized_value(::xmlserde::quick_xml::XmlVersion::Implicit1_0).expect("unescape attr value").into_owned();
                 match #opt_ty::deserialize(&s) {
                     Ok(__v) => {
                         #ident = Some(__v);
@@ -603,7 +603,7 @@ fn attr_match_branch(field: StructField) -> proc_macro2::TokenStream {
         quote! {
             #tag => {
                 use xmlserde::{XmlValue, XmlDeserialize};
-                let __s = attr.unescape_value().expect("unescape attr value").into_owned();
+                let __s = attr.normalized_value(::xmlserde::quick_xml::XmlVersion::Implicit1_0).expect("unescape attr value").into_owned();
                 match #t::deserialize(&__s) {
                     Ok(__v) => {
                         #tt
@@ -638,7 +638,8 @@ fn text_match_branch(field: StructField) -> proc_macro2::TokenStream {
     quote! {
         Ok(Event::Text(__s)) => {
             use ::xmlserde::{XmlValue, XmlDeserialize};
-            let __r = __s.unescape().unwrap();
+            let __decoded = __s.decode().expect("decode text");
+            let __r = ::xmlserde::quick_xml::escape::unescape(&__decoded).expect("unescape text");
             match #t::deserialize(&__r) {
                 Ok(__v) => {
                     // #ident = v;
@@ -832,7 +833,8 @@ fn children_match_branch(
         }
         Ok(Event::Text(t)) => {
             use ::xmlserde::{XmlValue, XmlDeserialize};
-            let _str = t.unescape().expect("failed to unescape string");
+            let _decoded = t.decode().expect("decode text");
+            let _str = ::xmlserde::quick_xml::escape::unescape(&_decoded).expect("unescape text");
             if _str.trim() != "" {
                 #untag_text_enum
             }
