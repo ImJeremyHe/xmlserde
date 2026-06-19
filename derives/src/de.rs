@@ -171,11 +171,12 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     let sfc_branch = sfc_match_branch(self_closed_children);
     let ident = &container.original.ident;
     let (impl_generics, type_generics, where_clause) = container.original.generics.split_for_impl();
-    let text_branch = {
+    let (text_init, text_branch, text_finalize) = {
         if let Some(t) = text {
-            Some(text_match_branch(t))
+            let (init, branch, finalize) = text_match_branch(t);
+            (init, Some(branch), Some(finalize))
         } else {
-            None
+            (quote! {}, None, None)
         }
     };
     let get_root = if let Some(r) = &container.root {
@@ -237,6 +238,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                 let mut buf = Vec::<u8>::new();
                 use ::xmlserde::quick_xml::events::Event;
                 #vec_init
+                #text_init
                 if _is_empty_ {} else {
                     loop {
                         match _reader_.read_event_into(&mut buf) {
@@ -255,6 +257,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
                         }
                     }
                 }
+                #text_finalize
                 #result_untagged_structs
                 Self {
                     #result
@@ -619,12 +622,21 @@ fn attr_match_branch(field: StructField) -> proc_macro2::TokenStream {
     }
 }
 
-fn text_match_branch(field: StructField) -> proc_macro2::TokenStream {
+/// Returns `(init, branch, finalize)`:
+/// * `init` declares the accumulator before the read loop,
+/// * `branch` are the match arms handling `Text` and `GeneralRef` events,
+/// * `finalize` deserializes the accumulated text and assigns the field.
+fn text_match_branch(
+    field: StructField,
+) -> (
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+) {
     if !matches!(field.ty, EleType::Text) {
         panic!("")
     }
     let ident = field.original.ident.as_ref().expect("should have idnet");
-    // let t = &field.original.ty;
     let (t, is_opt) = match field.generic {
         Generic::Vec(_) => panic!("text element should not be Vec<T>"),
         Generic::Opt(ty) => (ty, true),
@@ -635,22 +647,44 @@ fn text_match_branch(field: StructField) -> proc_macro2::TokenStream {
     } else {
         quote! {#ident = __v;}
     };
-    quote! {
+
+    let init = quote! {
+        let mut __text_buf: Option<String> = None;
+    };
+
+    let branch = quote! {
         Ok(Event::Text(__s)) => {
-            use ::xmlserde::{XmlValue, XmlDeserialize};
             let __decoded = __s.decode().expect("decode text");
-            let __r = ::xmlserde::quick_xml::escape::unescape(&__decoded).expect("unescape text");
-            match #t::deserialize(&__r) {
+            __text_buf.get_or_insert_with(String::new).push_str(&__decoded);
+        },
+        Ok(Event::GeneralRef(__r)) => {
+            let __buf = __text_buf.get_or_insert_with(String::new);
+            if let Some(__ch) = __r.resolve_char_ref().expect("resolve char ref") {
+                __buf.push(__ch);
+            } else {
+                let __name = __r.decode().expect("decode entity");
+                let __resolved = ::xmlserde::quick_xml::escape::resolve_predefined_entity(&__name)
+                    .expect("resolve predefined entity");
+                __buf.push_str(__resolved);
+            }
+        },
+    };
+
+    let finalize = quote! {
+        if let Some(__text) = __text_buf {
+            use ::xmlserde::{XmlValue, XmlDeserialize};
+            match #t::deserialize(&__text) {
                 Ok(__v) => {
-                    // #ident = v;
                     #tt
                 },
                 Err(_) => {
                     panic!("deserialize failed in text element")
                 }
             }
-        },
-    }
+        }
+    };
+
+    (init, branch, finalize)
 }
 
 fn untag_text_enum_branches(untags: &[StructField]) -> proc_macro2::TokenStream {

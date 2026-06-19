@@ -916,6 +916,23 @@ mod tests {
     }
 
     #[test]
+    fn test_unescape_xml_entities_in_text() {
+        #[derive(Debug, XmlDeserialize)]
+        #[xmlserde(root = b"root")]
+        struct Root {
+            #[xmlserde(name = b"f", ty = "text")]
+            f: String,
+        }
+
+        let xml = r#"<root><f>_xlfn.DISPIMG(&quot;ID_72CA26DEC13E452487646D77B0F1058F&quot;,1)</f></root>"#;
+        let root = xml_deserialize_from_str::<Root>(xml).unwrap();
+        assert_eq!(
+            root.f,
+            "_xlfn.DISPIMG(\"ID_72CA26DEC13E452487646D77B0F1058F\",1)"
+        );
+    }
+
+    #[test]
     fn test_unescape_xml_entities_in_opt_attr() {
         #[derive(Debug, XmlDeserialize)]
         #[xmlserde(root = b"constant")]
