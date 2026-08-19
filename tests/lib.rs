@@ -1003,4 +1003,57 @@ mod tests {
         assert_eq!(foo.size, 1);
         assert_eq!(foo.dxf_id, Some(6));
     }
+
+    /// Attribute values containing XML metacharacters must survive a
+    /// serialize -> deserialize round-trip.
+    ///
+    /// The derive writes attributes from raw bytes, which quick-xml does not
+    /// transform, so an unescaped `"` used to terminate the attribute early:
+    /// `valueFormula="#FIELD("units")"` parsed back as `#FIELD(`. Silent data
+    /// loss, and malformed XML on disk.
+    #[test]
+    fn attr_value_with_metacharacters_round_trips() {
+        #[derive(Debug, Clone, PartialEq, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"f")]
+        struct F {
+            #[xmlserde(name = b"req", ty = "attr")]
+            req: String,
+            #[xmlserde(name = b"opt", ty = "attr")]
+            opt: Option<String>,
+        }
+
+        for value in [
+            r#"#FIELD("units")*#FIELD("price")"#, // the case that broke
+            "a & b",
+            "x < y > z",
+            "it's",
+            r#"all: <>&'" of them"#,
+            "nothing special",
+        ] {
+            let original = F {
+                req: value.to_string(),
+                opt: Some(value.to_string()),
+            };
+            let xml = xml_serialize(original.clone());
+            let parsed = xml_deserialize_from_str::<F>(&xml)
+                .unwrap_or_else(|e| panic!("failed to parse {xml:?}: {e}"));
+            assert_eq!(parsed, original, "round-trip lost data for {value:?}");
+        }
+    }
+
+    /// The escaped form must be byte-identical to what quick-xml produces for
+    /// an attribute built from `&str`, which is the escaping code path.
+    #[test]
+    fn attr_escaping_matches_quick_xml() {
+        #[derive(XmlSerialize)]
+        #[xmlserde(root = b"f")]
+        struct F {
+            #[xmlserde(name = b"v", ty = "attr")]
+            v: String,
+        }
+        let xml = xml_serialize(F {
+            v: r#"a"b&c<d"#.to_string(),
+        });
+        assert_eq!(xml, r#"<f v="a&quot;b&amp;c&lt;d"/>"#);
+    }
 }
