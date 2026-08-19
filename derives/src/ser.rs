@@ -112,10 +112,10 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
             Generic::Vec(_) => panic!("cannot use a vector in attribute"),
             Generic::Opt(_) => {
                 quote! {
-                    let mut sr: String;
+                    let sr: String;
                     match &self.#ident {
                         Some(v) => {
-                            sr = v.serialize();
+                            sr = ::xmlserde::escape_attr_value(&v.serialize()).into_owned();
                             _attrs_.push(Attribute::from((#name.as_ref(), sr.as_bytes())));
                         },
                         None => {},
@@ -124,14 +124,14 @@ fn get_ser_struct_impl_block(container: Container) -> proc_macro2::TokenStream {
             }
             Generic::None => match &attr.default {
                 Some(path) => quote! {
-                    let mut ser;
+                    let ser: String;
                     if #path() != self.#ident {
-                        ser = self.#ident.serialize();
+                        ser = ::xmlserde::escape_attr_value(&self.#ident.serialize()).into_owned();
                         _attrs_.push(Attribute::from((#name.as_ref(), ser.as_bytes())));
                     }
                 },
                 None => quote! {
-                    let ser = self.#ident.serialize();
+                    let ser = ::xmlserde::escape_attr_value(&self.#ident.serialize()).into_owned();
                     _attrs_.push(Attribute::from((#name.as_ref(), ser.as_bytes())));
                 },
             },

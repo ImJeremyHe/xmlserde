@@ -159,6 +159,21 @@ pub use quick_xml;
 
 use quick_xml::events::Event;
 
+/// Escape a serialized value for use inside a double-quoted XML attribute.
+///
+/// The derived serializer builds attributes from raw bytes
+/// (`Attribute::from((&[u8], &[u8]))`), which quick-xml passes through
+/// untouched — so a value containing `"` would terminate the attribute early
+/// and produce malformed XML. Escaping here keeps serialization symmetric with
+/// deserialization, which unescapes.
+///
+/// Escapes the same five characters as quick-xml's `Attribute::from((&str,
+/// &str))`, so an attribute written through the derive is byte-identical to one
+/// written through that impl.
+pub fn escape_attr_value(raw: &str) -> std::borrow::Cow<'_, str> {
+    quick_xml::escape::escape(raw)
+}
+
 pub trait XmlSerialize {
     fn serialize<W: Write>(&self, tag: &[u8], writer: &mut quick_xml::Writer<W>);
     fn ser_root() -> Option<&'static [u8]> {
