@@ -128,6 +128,41 @@ If the capacity is from an **attr**, you can:
 #[xmlserde(name = b"pet", ty="child", vec_size="pet_count")]
 ```
 
+#### Alias
+
+A name is matched literally, prefix included. Sometimes the same element arrives
+under more than one spelling — most often because a prefix is a binding the
+producer chose, not part of the element's identity:
+
+```xml
+<xdr:twoCellAnchor xmlns:xdr="…/spreadsheetDrawing">   <!-- one producer -->
+<twoCellAnchor     xmlns="…/spreadsheetDrawing">        <!-- another, same element -->
+```
+
+`alias` lists further names accepted when **reading**. Serialization always
+writes `name`:
+
+```rs
+#[derive(XmlSerialize, XmlDeserialize)]
+#[xmlserde(root = b"wsDr")]
+pub struct WsDr {
+    #[xmlserde(name = b"xdr:twoCellAnchor", ty = "child")]
+    #[xmlserde(alias(b"twoCellAnchor"))]
+    pub anchors: Vec<Anchor>,
+}
+```
+
+Both spellings deserialize into `anchors`; serializing writes
+`<xdr:twoCellAnchor>`. It works on `attr`, `child` and `sfc` fields, and on an
+enum's variants. Matching an alias does not change how the element's own
+children are read, and the matched name is what gets used to find the closing
+tag — so nesting behaves the same either way.
+
+This is deliberately not namespace resolution: nothing here reads `xmlns`
+declarations or compares namespace URIs. It is an explicit statement that these
+names mean the same field, which is why it has to be opted into per field rather
+than inferred.
+
 #### Enum
 
 We provide 2 patterns for deserializing `Enum`.

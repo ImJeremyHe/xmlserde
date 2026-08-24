@@ -1,5 +1,6 @@
 use crate::symbol::{
-    DEFAULT, DENY_UNKNOWN, NAME, ROOT, SKIP_SERIALIZING, TYPE, VEC_SIZE, WITH_CUSTOM_NS, WITH_NS,
+    ALIAS, DEFAULT, DENY_UNKNOWN, NAME, ROOT, SKIP_SERIALIZING, TYPE, VEC_SIZE, WITH_CUSTOM_NS,
+    WITH_NS,
 };
 use proc_macro2::{Group, Span, TokenStream, TokenTree};
 use syn::parse::{self, Parse};
@@ -18,6 +19,8 @@ pub struct Container<'a> {
     pub with_ns: Option<syn::LitByteStr>,
     pub custom_ns: Vec<(syn::LitByteStr, syn::LitByteStr)>,
     pub root: Option<syn::LitByteStr>,
+    /// Extra names the ROOT element may go by on read; see `StructField::aliases`.
+    pub root_aliases: Vec<syn::LitByteStr>,
     pub deny_unknown: bool,
 }
 
@@ -41,6 +44,7 @@ impl<'a> Container<'a> {
         let mut with_ns = Option::<syn::LitByteStr>::None;
         let mut custom_ns = Vec::<(syn::LitByteStr, syn::LitByteStr)>::new();
         let mut root = Option::<syn::LitByteStr>::None;
+        let mut root_aliases = Vec::<syn::LitByteStr>::new();
         let mut deny_unknown = false;
         for meta_item in item
             .attrs
@@ -60,6 +64,15 @@ impl<'a> Container<'a> {
                 }
                 Meta::Path(p) if p == DENY_UNKNOWN => {
                     deny_unknown = true;
+                }
+                Meta::List(l) if l.path == ALIAS => {
+                    let strs = l
+                        .parse_args_with(Punctuated::<syn::LitByteStr, Comma>::parse_terminated)
+                        .expect("alias takes a list of byte strings");
+                    if strs.is_empty() {
+                        panic!("alias should not be empty")
+                    }
+                    root_aliases.extend(strs.into_iter());
                 }
                 Meta::List(l) if l.path == WITH_CUSTOM_NS => {
                     let strs = l
@@ -92,6 +105,7 @@ impl<'a> Container<'a> {
                     with_ns,
                     custom_ns,
                     root,
+                    root_aliases: root_aliases.clone(),
                     deny_unknown,
                 }
             }
@@ -108,6 +122,7 @@ impl<'a> Container<'a> {
                     with_ns,
                     custom_ns,
                     root,
+                    root_aliases: root_aliases.clone(),
                     deny_unknown,
                 }
             }
@@ -151,6 +166,16 @@ impl<'a> FieldsSummary<'a> {
 pub struct StructField<'a> {
     pub ty: EleType,
     pub name: Option<syn::LitByteStr>,
+    /// Extra names accepted when READING. Serialization always writes `name`.
+    ///
+    /// The case this exists for is one element with two equally valid
+    /// spellings. In XML an element's identity is its namespace plus its local
+    /// name, and the prefix is just a binding the producer chose: Excel writes
+    /// `<xdr:twoCellAnchor>` having bound `xdr`, openpyxl writes
+    /// `<twoCellAnchor>` having bound the same namespace as the default. Since
+    /// names here are matched literally, one of the two would go unrecognised —
+    /// silently, because an unmatched child is skipped.
+    pub aliases: Vec<syn::LitByteStr>,
     pub skip_serializing: bool,
     pub default: Option<syn::ExprPath>,
     pub original: &'a syn::Field,
@@ -169,6 +194,28 @@ impl<'a> StructField<'a> {
         if untagged && self.name.is_some() {
             panic!("untagged types doesn't need a name")
         }
+        if !self.aliases.is_empty() {
+            // An alias is an alternative spelling OF a name, so there has to be
+            // one, and it has to be a kind of field that is matched by name.
+            let name = self
+                .name
+                .as_ref()
+                .expect("alias needs a name to be an alias of");
+            if untagged || matches!(self.ty, EleType::Text) {
+                panic!("alias is only meaningful for `attr`, `child` and `sfc`")
+            }
+            let mut seen = vec![name.value()];
+            for a in self.aliases.iter() {
+                let v = a.value();
+                if seen.contains(&v) {
+                    panic!(
+                        "duplicate alias {:?}",
+                        String::from_utf8_lossy(&v).to_string()
+                    )
+                }
+                seen.push(v);
+            }
+        }
     }
 
     pub fn from_ast(f: &'a syn::Field) -> Option<Self> {
@@ -177,6 +224,7 @@ impl<'a> StructField<'a> {
         let mut default = Option::<syn::ExprPath>::None;
         let mut ty = Option::<EleType>::None;
         let mut vec_size = Option::<syn::Lit>::None;
+        let mut aliases = Vec::<syn::LitByteStr>::new();
         let generic = get_generics(&f.ty);
         for meta_item in f
             .attrs
@@ -189,6 +237,15 @@ impl<'a> StructField<'a> {
                     if let Ok(s) = get_lit_byte_str(&m.value) {
                         name = Some(s.clone());
                     }
+                }
+                Meta::List(l) if l.path == ALIAS => {
+                    let strs = l
+                        .parse_args_with(Punctuated::<syn::LitByteStr, Comma>::parse_terminated)
+                        .expect("alias takes a list of byte strings, e.g. alias(b\"foo\")");
+                    if strs.is_empty() {
+                        panic!("alias should not be empty")
+                    }
+                    aliases.extend(strs.into_iter());
                 }
                 NameValue(m) if m.path == TYPE => {
                     if let Ok(s) = get_lit_str(&m.value) {
@@ -235,6 +292,7 @@ impl<'a> StructField<'a> {
             Some(StructField {
                 ty: ty.expect("should has a ty"),
                 name,
+                aliases,
                 skip_serializing,
                 default,
                 original: f,
@@ -260,6 +318,8 @@ impl<'a> StructField<'a> {
 
 pub struct EnumVariant<'a> {
     pub name: Option<syn::LitByteStr>,
+    /// Extra names accepted when reading; see `StructField::aliases`.
+    pub aliases: Vec<syn::LitByteStr>,
     pub ident: &'a syn::Ident,
     pub ty: Option<&'a syn::Type>,
     pub ele_type: EleType,
@@ -268,6 +328,7 @@ pub struct EnumVariant<'a> {
 impl<'a> EnumVariant<'a> {
     pub fn from_ast(v: &'a Variant) -> Self {
         let mut name = Option::<syn::LitByteStr>::None;
+        let mut aliases = Vec::<syn::LitByteStr>::new();
         let mut ele_type = EleType::Child;
         for meta_item in v
             .attrs
@@ -280,6 +341,15 @@ impl<'a> EnumVariant<'a> {
                     if let Ok(s) = get_lit_byte_str(&m.value) {
                         name = Some(s.clone());
                     }
+                }
+                Meta::List(l) if l.path == ALIAS => {
+                    let strs = l
+                        .parse_args_with(Punctuated::<syn::LitByteStr, Comma>::parse_terminated)
+                        .expect("alias takes a list of byte strings, e.g. alias(b\"foo\")");
+                    if strs.is_empty() {
+                        panic!("alias should not be empty")
+                    }
+                    aliases.extend(strs.into_iter());
                 }
                 NameValue(m) if m.path == TYPE => {
                     if let Ok(s) = get_lit_str(&m.value) {
@@ -309,6 +379,7 @@ impl<'a> EnumVariant<'a> {
         let ident = &v.ident;
         EnumVariant {
             name,
+            aliases,
             ty,
             ident,
             ele_type,

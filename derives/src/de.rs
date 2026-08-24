@@ -12,6 +12,29 @@ pub fn get_de_impl_block(input: DeriveInput) -> proc_macro2::TokenStream {
     }
 }
 
+/// The pattern a name matches on READ: the declared `name`, plus any `alias`.
+///
+/// Serialization is untouched by this — `ser.rs` only ever writes `name`. The
+/// asymmetry is the point: a producer may spell an element differently from the
+/// way we choose to write it, and both spellings have to be understood.
+fn read_pattern(
+    name: &syn::LitByteStr,
+    aliases: &[syn::LitByteStr],
+) -> proc_macro2::TokenStream {
+    if aliases.is_empty() {
+        quote! { #name }
+    } else {
+        quote! { #name #(| #aliases)* }
+    }
+}
+
+/// Every name a field answers to on read, as a list.
+fn read_names(name: &syn::LitByteStr, aliases: &[syn::LitByteStr]) -> Vec<syn::LitByteStr> {
+    let mut v = vec![name.clone()];
+    v.extend(aliases.iter().cloned());
+    v
+}
+
 pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream {
     macro_rules! children_branches {
         ($attrs:expr, $b:expr) => {
@@ -20,18 +43,19 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
                     return quote! {};
                 }
                 let name = v.name.as_ref().expect("should have name");
+                let pat = read_pattern(name, &v.aliases);
                 let ty = v.ty;
                 let ident = v.ident;
                 if let Some(ty) = ty {
                     quote! {
-                        #name => {
-                            let _r = #ty::deserialize(#name, _reader_, $attrs, $b);
+                        __matched @ (#pat) => {
+                            let _r = #ty::deserialize(__matched, _reader_, $attrs, $b);
                             return Self::#ident(_r);
                         }
                     }
                 } else {
                     quote! {
-                        #name => {
+                        #pat => {
                             return Self::#ident;
                         }
                     }
@@ -74,7 +98,8 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
         .filter(|v| matches!(v.ele_type, EleType::Child))
         .map(|v| {
             let name = v.name.as_ref().expect("should have `name` for `child`");
-            quote! {#name}
+            let names = read_names(name, &v.aliases);
+            quote! {#(#names,)*}
         });
     let exact_tags = children_branches!(_attrs_, _is_empty_);
     quote! {
@@ -115,7 +140,7 @@ pub fn get_de_enum_impl_block(container: Container) -> proc_macro2::TokenStream 
             }
 
             fn __get_children_tags() -> Vec<&'static [u8]> {
-                vec![#(#children_tags,)*]
+                vec![#(#children_tags)*]
             }
 
             #text_function
@@ -143,7 +168,8 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
     let get_children_tags = if children.len() > 0 || untagged_enums.len() > 0 {
         let names = children.iter().map(|f| {
             let n = f.name.as_ref().expect("should have name");
-            quote! {#n}
+            let all = read_names(n, &f.aliases);
+            quote! {#(#all,)*}
         });
         let untagged_enums = untagged_enums.iter().map(|f| {
             let ty = match &f.generic {
@@ -155,7 +181,7 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
         });
         quote! {
             fn __get_children_tags() -> Vec<&'static [u8]> {
-                let mut r: Vec<&'static [u8]> = vec![#(#names,)*];
+                let mut r: Vec<&'static [u8]> = vec![#(#names)*];
                 #(r.extend(#untagged_enums.into_iter());)*
                 r
             }
@@ -180,12 +206,26 @@ pub fn get_de_struct_impl_block(container: Container) -> proc_macro2::TokenStrea
         }
     };
     let get_root = if let Some(r) = &container.root {
+        let aliases = &container.root_aliases;
+        let root_aliases = if aliases.is_empty() {
+            quote! {}
+        } else {
+            quote! {
+                fn de_root_aliases() -> &'static [&'static [u8]] {
+                    &[#(#aliases,)*]
+                }
+            }
+        };
         quote! {
             fn de_root() -> Option<&'static [u8]> {
                 Some(#r)
             }
+            #root_aliases
         }
     } else {
+        if !container.root_aliases.is_empty() {
+            panic!("alias on a type without a root has nothing to alias")
+        }
         quote! {}
     };
 
@@ -451,6 +491,7 @@ fn get_deserialize_from_unparsed(children: &[StructField]) -> proc_macro2::Token
             .name
             .as_ref()
             .expect("types can not have recursive untagged fields");
+        let name = &read_pattern(name, &c.aliases);
         let original_type = &c.original.ty;
         let ident = c.original.ident.as_ref().unwrap();
         match &c.generic {
@@ -561,12 +602,12 @@ fn sfc_match_branch(fields: Vec<StructField>) -> proc_macro2::TokenStream {
             panic!("")
         }
         let tag = f.name.as_ref().unwrap();
-        tags.push(tag);
+        tags.push(read_pattern(tag, &f.aliases));
         let ident = f.original.ident.as_ref().unwrap();
         idents.push(ident);
     });
     quote! {
-        #(Ok(Event::Empty(__s)) if __s.name().into_inner() == #tags => {
+        #(Ok(Event::Empty(__s)) if matches!(__s.name().into_inner(), #tags) => {
             #idents = true;
         })*
     }
@@ -578,6 +619,7 @@ fn attr_match_branch(field: StructField) -> proc_macro2::TokenStream {
     }
     let t = &field.original.ty;
     let tag = field.name.as_ref().expect("should have a field name");
+    let tag = &read_pattern(tag, &field.aliases);
     let ident = field.original.ident.as_ref().expect("should have ident");
     if field.generic.is_opt() {
         let opt_ty = field.generic.get_opt().unwrap();
@@ -803,21 +845,26 @@ fn children_match_branch(
             panic!("")
         }
         let tag = f.name.as_ref().expect("should have name");
+        // The matched name, not the declared one, is what gets passed down: the
+        // callee compares it against the closing tag, so handing it `name` after
+        // matching an alias would leave it hunting for an end tag that is not
+        // there.
+        let pat = read_pattern(tag, &f.aliases);
         let ident = f.original.ident.as_ref().unwrap();
         let t = &f.original.ty;
         let branch = match f.generic {
             Generic::Vec(vec_ty) => {
                 quote! {
-                    #tag => {
-                        let __ele = #vec_ty::deserialize(#tag, _reader_, s.attributes(), _is_empty_);
+                    __matched @ (#pat) => {
+                        let __ele = #vec_ty::deserialize(__matched, _reader_, s.attributes(), _is_empty_);
                         #ident.push(__ele);
                     }
                 }
             }
             Generic::Opt(opt_ty) => {
                 quote! {
-                    #tag => {
-                        let __f = #opt_ty::deserialize(#tag, _reader_, s.attributes(), _is_empty_);
+                    __matched @ (#pat) => {
+                        let __f = #opt_ty::deserialize(__matched, _reader_, s.attributes(), _is_empty_);
                         #ident = Some(__f);
                     },
                 }
@@ -833,8 +880,8 @@ fn children_match_branch(
                     }
                 };
                 quote! {
-                    #tag => {
-                        let __f = #t::deserialize(#tag, _reader_, s.attributes(), _is_empty_);
+                    __matched @ (#pat) => {
+                        let __f = #t::deserialize(__matched, _reader_, s.attributes(), _is_empty_);
                         #tt
                     },
                 }
