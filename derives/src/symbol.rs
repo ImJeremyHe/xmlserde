@@ -10,6 +10,7 @@ pub const WITH_CUSTOM_NS: Symbol = Symbol("with_custom_ns");
 pub const ROOT: Symbol = Symbol("root");
 pub const XML_SERDE: Symbol = Symbol("xmlserde");
 pub const NAME: Symbol = Symbol("name");
+pub const ALIAS: Symbol = Symbol("alias");
 pub const TYPE: Symbol = Symbol("ty");
 pub const SKIP_SERIALIZING: Symbol = Symbol("skip_serializing");
 pub const VEC_SIZE: Symbol = Symbol("vec_size");

@@ -209,6 +209,13 @@ pub trait XmlDeserialize: Sized {
         None
     }
 
+    /// Further names the root element may go by. Serialization always uses
+    /// `de_root`; this is read-only, for a document whose root carries a
+    /// different but equivalent spelling — see the `alias` attribute.
+    fn de_root_aliases() -> &'static [&'static [u8]] {
+        &[]
+    }
+
     /// A helper function used when ty = `untag`. It could help
     /// us to find out the children tags when deserializing
     fn __get_children_tags() -> Vec<&'static [u8]> {
@@ -401,6 +408,23 @@ where
     xml_deserialize_from_reader_with_root(reader, root)
 }
 
+fn root_matches<T: XmlDeserialize>(found: &[u8], root: &[u8]) -> bool {
+    found == root || T::de_root_aliases().iter().any(|a| *a == found)
+}
+
+/// The declared root or the alias that matched, as a `'static` name the callee
+/// can hold on to while it looks for the closing tag.
+fn matched_root<'a, T: XmlDeserialize>(found: &[u8], root: &'a [u8]) -> &'a [u8] {
+    if found == root {
+        return root;
+    }
+    T::de_root_aliases()
+        .iter()
+        .copied()
+        .find(|a| *a == found)
+        .unwrap_or(root)
+}
+
 pub(crate) fn xml_deserialize_from_reader_with_root<T, R>(
     reader: R,
     root: &[u8],
@@ -413,12 +437,16 @@ where
     let mut buf = Vec::<u8>::new();
     loop {
         match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(start)) if start.name().into_inner() == root => {
-                let result = T::deserialize(root, &mut reader, start.attributes(), false);
+            // The matched name is handed on, not `root`: the callee compares it
+            // against the closing tag.
+            Ok(Event::Start(start)) if root_matches::<T>(start.name().into_inner(), root) => {
+                let matched = matched_root::<T>(start.name().into_inner(), root);
+                let result = T::deserialize(matched, &mut reader, start.attributes(), false);
                 return Ok(result);
             }
-            Ok(Event::Empty(start)) if start.name().into_inner() == root => {
-                let result = T::deserialize(root, &mut reader, start.attributes(), true);
+            Ok(Event::Empty(start)) if root_matches::<T>(start.name().into_inner(), root) => {
+                let matched = matched_root::<T>(start.name().into_inner(), root);
+                let result = T::deserialize(matched, &mut reader, start.attributes(), true);
                 return Ok(result);
             }
             Ok(Event::Eof) => {

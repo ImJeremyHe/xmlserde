@@ -950,6 +950,169 @@ mod tests {
         1
     }
 
+    /// `alias` accepts extra spellings on READ; serialization still writes
+    /// `name`. The case it exists for: in XML an element's identity is its
+    /// namespace plus its local name, and the prefix is a binding the producer
+    /// chose. Excel writes `<xdr:twoCellAnchor>` having bound `xdr`; openpyxl
+    /// binds the same namespace as the default and writes `<twoCellAnchor>`.
+    /// Names are matched literally here, so without an alias one of the two
+    /// spellings goes unrecognised — silently, since an unmatched child is
+    /// skipped.
+    #[test]
+    fn alias_child_accepts_either_spelling() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        struct Num {
+            #[xmlserde(ty = "text")]
+            v: u32,
+        }
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        struct Anchor {
+            #[xmlserde(name = b"xdr:col", ty = "child")]
+            col: Num,
+        }
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"wsDr")]
+        struct WsDr {
+            #[xmlserde(name = b"xdr:twoCellAnchor", ty = "child")]
+            #[xmlserde(alias(b"twoCellAnchor"))]
+            anchors: Vec<Anchor>,
+        }
+
+        // The prefixed spelling, as Excel writes it.
+        let prefixed = r#"<wsDr><xdr:twoCellAnchor><xdr:col>3</xdr:col></xdr:twoCellAnchor></wsDr>"#;
+        let a = xml_deserialize_from_str::<WsDr>(prefixed).unwrap();
+        assert_eq!(a.anchors.len(), 1);
+        assert_eq!(a.anchors[0].col.v, 3);
+
+        // The unprefixed one, as a producer that binds the default namespace
+        // writes it. Note the CHILD is still prefixed here: matching the alias
+        // must not change how the element's own children are read.
+        let plain = r#"<wsDr><twoCellAnchor><xdr:col>7</xdr:col></twoCellAnchor></wsDr>"#;
+        let b = xml_deserialize_from_str::<WsDr>(plain).unwrap();
+        assert_eq!(b.anchors.len(), 1, "the alias should have matched");
+        assert_eq!(b.anchors[0].col.v, 7, "and its children still parse");
+
+        // Writing always uses `name`, whichever spelling came in.
+        assert_eq!(
+            xml_serialize(b),
+            r#"<wsDr><xdr:twoCellAnchor><xdr:col>7</xdr:col></xdr:twoCellAnchor></wsDr>"#
+        );
+    }
+
+    /// Several aliases at once, and the end tag is found for each. The matched
+    /// name — not the declared one — has to be handed to the child parser, or it
+    /// hunts for an end tag that is not there and swallows the rest of the
+    /// document.
+    #[test]
+    fn alias_child_with_several_spellings_and_nesting() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        struct Inner {
+            #[xmlserde(name = b"v", ty = "attr")]
+            v: u32,
+        }
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"root")]
+        struct Root {
+            #[xmlserde(name = b"a:item", ty = "child")]
+            #[xmlserde(alias(b"item", b"x:item"))]
+            items: Vec<Inner>,
+            #[xmlserde(name = b"after", ty = "child")]
+            after: Option<Num2>,
+        }
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        struct Num2 {
+            #[xmlserde(ty = "text")]
+            v: u32,
+        }
+        let xml = r#"<root><item v="1"/><a:item v="2"/><x:item v="3"/><after>9</after></root>"#;
+        let r = xml_deserialize_from_str::<Root>(xml).unwrap();
+        assert_eq!(
+            r.items.iter().map(|i| i.v).collect::<Vec<_>>(),
+            vec![1, 2, 3]
+        );
+        assert_eq!(
+            r.after.map(|n| n.v),
+            Some(9),
+            "parsing continued past the aliased elements"
+        );
+    }
+
+    /// Aliases work for attributes and for self-closed children too.
+    #[test]
+    fn alias_on_attr_and_self_closed_child() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"c")]
+        struct C {
+            #[xmlserde(name = b"r:id", ty = "attr")]
+            #[xmlserde(alias(b"id"))]
+            id: Option<String>,
+            #[xmlserde(name = b"xdr:flag", ty = "sfc")]
+            #[xmlserde(alias(b"flag"))]
+            flag: bool,
+        }
+        let a = xml_deserialize_from_str::<C>(r#"<c id="x1"><flag/></c>"#).unwrap();
+        assert_eq!(a.id.as_deref(), Some("x1"));
+        assert!(a.flag);
+        let b = xml_deserialize_from_str::<C>(r#"<c r:id="x2"><xdr:flag/></c>"#).unwrap();
+        assert_eq!(b.id.as_deref(), Some("x2"));
+        assert!(b.flag);
+        // Written under `name` in both cases.
+        assert_eq!(
+            xml_serialize(b),
+            r#"<c r:id="x2"><xdr:flag/></c>"#
+        );
+    }
+
+    /// And for an enum's child variants.
+    #[test]
+    fn alias_on_enum_variant() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        struct Leaf {
+            #[xmlserde(name = b"v", ty = "attr")]
+            v: u32,
+        }
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        enum Choice {
+            #[xmlserde(name = b"a:one")]
+            #[xmlserde(alias(b"one"))]
+            One(Leaf),
+            #[xmlserde(name = b"a:two")]
+            Two(Leaf),
+        }
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"root")]
+        struct Root {
+            #[xmlserde(ty = "untagged_enum")]
+            choice: Option<Choice>,
+        }
+        let r = xml_deserialize_from_str::<Root>(r#"<root><one v="5"/></root>"#).unwrap();
+        match r.choice {
+            Some(Choice::One(l)) => assert_eq!(l.v, 5),
+            other => panic!("expected the aliased variant, got {:?}", other),
+        }
+    }
+
+    /// The root element can be aliased too — a document whose root carries the
+    /// other spelling would otherwise fail outright with "cannot find the
+    /// element", since the root is matched literally before anything else runs.
+    #[test]
+    fn alias_on_the_root() {
+        #[derive(Debug, XmlSerialize, XmlDeserialize)]
+        #[xmlserde(root = b"xdr:wsDr")]
+        #[xmlserde(alias(b"wsDr"))]
+        struct WsDr {
+            #[xmlserde(name = b"xdr:n", ty = "attr")]
+            #[xmlserde(alias(b"n"))]
+            n: u32,
+        }
+        let a = xml_deserialize_from_str::<WsDr>(r#"<xdr:wsDr xdr:n="1"/>"#).unwrap();
+        assert_eq!(a.n, 1);
+        let b = xml_deserialize_from_str::<WsDr>(r#"<wsDr n="2"/>"#).unwrap();
+        assert_eq!(b.n, 2, "the root alias matched");
+        // And it is written back under the declared root.
+        assert_eq!(xml_serialize(b), r#"<xdr:wsDr xdr:n="2"/>"#);
+    }
+
     #[test]
     fn test_ooxml_1() {
         let xml = r#"<tableStyleElement type="wholeTable" dxfId="6" />"#;
